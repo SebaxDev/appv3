@@ -49,8 +49,6 @@ from components.reclamos.impresion import render_impresion_reclamos
 from components.reclamos.planificacion import render_planificacion_grupos
 from components.reclamos.cierre import render_cierre_reclamos
 from components.resumen_jornada import render_resumen_jornada
-from components.notifications import init_notification_manager
-from components.notification_bell import render_notification_bell
 from components.auth import has_permission, check_authentication, render_login
 from components.new_navigation import render_main_navigation, render_user_info
 from utils.helpers import show_warning, show_error, show_success, show_info, format_phone_number, format_dni, get_current_datetime, format_datetime, truncate_text, is_valid_email, safe_float_conversion, safe_int_conversion, get_status_badge, format_currency, get_breadcrumb_icon
@@ -283,13 +281,10 @@ def init_google_sheets():
             scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         )
         client = gspread.authorize(creds)
-        sheet_notifications = client.open_by_key(SHEET_ID).worksheet(WORKSHEET_NOTIFICACIONES)
-        init_notification_manager(sheet_notifications)
         return (
             client.open_by_key(SHEET_ID).worksheet(WORKSHEET_RECLAMOS),
             client.open_by_key(SHEET_ID).worksheet(WORKSHEET_CLIENTES),
             client.open_by_key(SHEET_ID).worksheet(WORKSHEET_USUARIOS),
-            sheet_notifications
         )
     try:
         return _connect()
@@ -297,17 +292,11 @@ def init_google_sheets():
         st.error(f"Error de conexión: {str(e)}")
         st.stop()
 
-def precache_all_data(sheet_reclamos, sheet_clientes, sheet_usuarios, sheet_notifications):
-    _ = safe_get_sheet_data(sheet_reclamos, COLUMNAS_RECLAMOS)
-    _ = safe_get_sheet_data(sheet_clientes, COLUMNAS_CLIENTES)
-    _ = safe_get_sheet_data(sheet_usuarios, COLUMNAS_USUARIOS)
-    _ = safe_get_sheet_data(sheet_notifications, COLUMNAS_NOTIFICACIONES)
-
 loading_placeholder = st.empty()
 loading_placeholder.markdown(get_loading_spinner(), unsafe_allow_html=True)
 try:
-    sheet_reclamos, sheet_clientes, sheet_usuarios, sheet_notifications = init_google_sheets()
-    if not all([sheet_reclamos, sheet_clientes, sheet_usuarios, sheet_notifications]):
+    sheet_reclamos, sheet_clientes, sheet_usuarios = init_google_sheets()
+    if not all([sheet_reclamos, sheet_clientes, sheet_usuarios]):
         st.stop()
 finally:
     loading_placeholder.empty()
@@ -319,8 +308,6 @@ if not check_authentication():
 # ✅ Datos del usuario actual
 user_info = st.session_state.auth.get('user_info', {})
 user_role = user_info.get('rol', '')
-
-precache_all_data(sheet_reclamos, sheet_clientes, sheet_usuarios, sheet_notifications)
 
 df_reclamos, df_clientes, df_usuarios = safe_get_sheet_data(sheet_reclamos, COLUMNAS_RECLAMOS), safe_get_sheet_data(sheet_clientes, COLUMNAS_CLIENTES), safe_get_sheet_data(sheet_usuarios, COLUMNAS_USUARIOS)
 st.session_state.df_reclamos = df_reclamos
@@ -349,14 +336,12 @@ st.markdown(get_main_styles_v2(dark_mode=st.session_state.modo_oscuro), unsafe_a
 # --- HEADER Y NAVEGACIÓN ---
 st.markdown("""<h1 style="text-align: center; margin-bottom: 2rem;">Fusion Reclamos CRM</h1>""", unsafe_allow_html=True)
 
-header_cols = st.columns([3, 1, 1, 1])
+header_cols = st.columns([4, 1, 1])
 with header_cols[0]:
     render_user_info()
 with header_cols[1]:
     st.checkbox("🌙", value=st.session_state.get(MODO_OSCURO_KEY, False), key=MODO_OSCURO_KEY, on_change=_on_toggle_modo_oscuro, help="Modo oscuro")
 with header_cols[2]:
-    render_notification_bell()
-with header_cols[3]:
     if st.button("Salir 🚪", use_container_width=True):
         st.session_state.auth['logged_in'] = False
         st.session_state.auth['user_info'] = {}
@@ -364,9 +349,6 @@ with header_cols[3]:
 
 opcion = st.session_state.get('current_page', 'Inicio')
 render_main_navigation()
-
-with st.expander("📊 Resumen General", expanded=True):
-    render_resumen_jornada(df_reclamos)
 
 # --------------------------
 # RUTEO DE COMPONENTES
@@ -447,8 +429,10 @@ if opcion in COMPONENTES and has_permission(COMPONENTES[opcion]["permiso"]):
             st.rerun()
 
 # --------------------------
-# RESUMEN DE JORNADA OPTIMIZADO
+# FOOTER Y RESUMEN
 # --------------------------
+st.markdown("---")
 with st.container():
     render_resumen_jornada(df_reclamos)
-    st.markdown('</div>', unsafe_allow_html=True)
+
+st.markdown(f"""<div style="text-align:center; font-size:0.8rem; color: var(--text-muted); padding-top: 2rem;">Desarrollado con 💜 por Sebastián Andrés (v2.6)</div>""", unsafe_allow_html=True)

@@ -148,14 +148,6 @@ def _mostrar_reasignacion_tecnico(df_reclamos, sheet_reclamos):
                 
                 if success:
                     st.success("✅ Técnico actualizado correctamente.")
-                    if 'notification_manager' in st.session_state and nuevo_tecnico:
-                        mensaje = f"📌 El cliente N° {reclamo['Nº Cliente']} fue asignado al técnico {nuevo_tecnico}."
-                        st.session_state.notification_manager.add(
-                            notification_type="reclamo_asignado",
-                            message=mensaje,
-                            user_target="all",
-                            claim_id=reclamo["ID Reclamo"]
-                        )
                     return True
                 else:
                     st.error(f"❌ Error al actualizar: {error}")
