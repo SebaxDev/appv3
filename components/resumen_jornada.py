@@ -5,11 +5,11 @@ import pandas as pd
 import pytz
 from datetime import datetime, timedelta
 from utils.date_utils import format_fecha, ahora_argentina
-from config.settings import NOTIFICATION_TYPES, DEBUG_MODE
+from config.settings import DEBUG_MODE
 
 def render_resumen_jornada(df_reclamos):
     """
-    Muestra un resumen del estado general de los reclamos.
+    Muestra un resumen del estado general de los reclamos, incluyendo los del día actual.
     """
 
     if df_reclamos.empty:
@@ -20,18 +20,36 @@ def render_resumen_jornada(df_reclamos):
         # --- Preparación de Datos ---
         df_copy = df_reclamos.copy()
         df_copy["Fecha y hora"] = pd.to_datetime(df_copy["Fecha y hora"], errors='coerce')
+        df_copy.dropna(subset=["Fecha y hora"], inplace=True)
 
         # --- Cálculos de Métricas ---
+        argentina_tz = pytz.timezone("America/Argentina/Buenos_Aires")
+        now_in_arg = ahora_argentina()
+        start_of_today = now_in_arg.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_of_today = start_of_today + timedelta(days=1)
+
+        # Lógica robusta para manejar zonas horarias
+        try:
+            # Primero intenta localizar las fechas (asume que son naive)
+            dates_aware = df_copy["Fecha y hora"].dt.tz_localize(argentina_tz, ambiguous='infer')
+        except TypeError:
+            # Si ya son aware, simplemente las convierte a la zona correcta
+            dates_aware = df_copy["Fecha y hora"].dt.tz_convert(argentina_tz)
+
+        df_hoy = df_copy[(dates_aware >= start_of_today) & (dates_aware < end_of_today)]
+        total_hoy = len(df_hoy)
+
         pendientes_total = len(df_copy[df_copy["Estado"] == "Pendiente"])
         en_curso_total = len(df_copy[df_copy["Estado"] == "En curso"])
         desconexion_total = len(df_copy[df_copy["Estado"] == "Desconexión"])
 
         # --- Visualización de Métricas ---
         st.markdown("##### Resumen de Estado General")
-        cols = st.columns(3)
-        cols[0].metric("⏳ Pendientes (Total)", pendientes_total)
-        cols[1].metric("🔧 En Curso (Total)", en_curso_total)
-        cols[2].metric("🔌 Desconexión (Total)", desconexion_total)
+        cols = st.columns(4)
+        cols[0].metric("📝 Reclamos de Hoy", total_hoy)
+        cols[1].metric("⏳ Pendientes (Total)", pendientes_total)
+        cols[2].metric("🔧 En Curso (Total)", en_curso_total)
+        cols[3].metric("🔌 Desconexión (Total)", desconexion_total)
 
         st.markdown("---")
 
@@ -63,7 +81,7 @@ def render_resumen_jornada(df_reclamos):
                 for _, row in reclamos_antiguos.iterrows():
                     fecha_formateada = format_fecha(row["Fecha y hora"])
                     st.markdown(
-                        f"- **{row['Nombre']}** ({row['Nº Cliente']}) - Desde: {fecha_formateada} - Técnicos: {row['Técnico']}"
+                        f"- **{row['Nombre']}** ({row['Nº Cliente']}) - Desde: {fecha_formateada} - Técnicos: {row.get('Técnico', 'N/A')}"
                     )
         else:
             st.info("No hay reclamos en curso en este momento.")
