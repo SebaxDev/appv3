@@ -36,8 +36,8 @@ def render_gestion_reclamos(df_reclamos, df_clientes, sheet_reclamos, user):
     _render_desconexiones(df_reclamos, sheet_reclamos)
 
 def _render_conteo_por_tipo(df_reclamos):
-    """Muestra el conteo de reclamos pendientes y en curso, por tipo."""
-    st.subheader("📈 Conteo por Tipo de Reclamo")
+    """Muestra el conteo total de reclamos activos (pendientes y en curso), por tipo."""
+    st.subheader("📈 Conteo de Reclamos Activos por Tipo")
 
     df_activos = df_reclamos[df_reclamos["Estado"].isin(["Pendiente", "En curso"])]
 
@@ -45,15 +45,10 @@ def _render_conteo_por_tipo(df_reclamos):
         st.info("No hay reclamos activos (pendientes o en curso).")
         return
 
-    conteo = df_activos.groupby(["Tipo de reclamo", "Estado"]).size().unstack(fill_value=0)
+    conteo = df_activos.groupby("Tipo de reclamo").size().reset_index(name="Total Activos")
+    conteo.rename(columns={"Tipo de reclamo": "Tipo de Reclamo"}, inplace=True)
 
-    # Asegurarse que las columnas 'Pendiente' y 'En curso' existan
-    if "Pendiente" not in conteo:
-        conteo["Pendiente"] = 0
-    if "En curso" not in conteo:
-        conteo["En curso"] = 0
-
-    st.dataframe(conteo[["Pendiente", "En curso"]], use_container_width=True)
+    st.dataframe(conteo, use_container_width=True, hide_index=True)
 
 def _render_ultimos_reclamos(df_ultimos):
     """Muestra una lista filtrable de los últimos reclamos."""
