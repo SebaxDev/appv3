@@ -26,22 +26,19 @@ def render_resumen_jornada(df_reclamos):
         df_copy.dropna(subset=["Fecha y hora"], inplace=True)
         df_hoy = df_copy[df_copy["Fecha y hora"].dt.tz_localize(argentina_tz).dt.date == hoy].copy()
 
-        # --- Cálculos de Métricas del Día ---
-        if df_hoy.empty:
-            st.info("No se han registrado reclamos en el día de hoy.")
-        else:
-            total_hoy = len(df_hoy)
-            pendientes_hoy = len(df_hoy[df_hoy["Estado"] == "Pendiente"])
-            en_curso_hoy = len(df_hoy[df_hoy["Estado"] == "En curso"])
-            desconexion_hoy = len(df_hoy[df_hoy["Estado"] == "Desconexión"])
+        # --- Cálculos de Métricas ---
+        total_hoy = len(df_hoy)
+        pendientes_total = len(df_copy[df_copy["Estado"] == "Pendiente"])
+        en_curso_total = len(df_copy[df_copy["Estado"] == "En curso"])
+        desconexion_total = len(df_copy[df_copy["Estado"] == "Desconexión"])
 
-            # --- Visualización de Métricas ---
-            st.markdown("##### Reclamos del Día")
-            cols = st.columns(4)
-            cols[0].metric("📝 Total Hoy", total_hoy)
-            cols[1].metric("⏳ Pendientes", pendientes_hoy)
-            cols[2].metric("🔧 En Curso", en_curso_hoy)
-            cols[3].metric("🔌 Desconexión", desconexion_hoy)
+        # --- Visualización de Métricas ---
+        st.markdown("##### Resumen de Estado")
+        cols = st.columns(4)
+        cols[0].metric("📝 Reclamos de Hoy", total_hoy)
+        cols[1].metric("⏳ Pendientes (Total)", pendientes_total)
+        cols[2].metric("🔧 En Curso (Total)", en_curso_total)
+        cols[3].metric("🔌 Desconexión (Total)", desconexion_total)
 
         st.markdown("---")
 
