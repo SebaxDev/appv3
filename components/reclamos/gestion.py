@@ -16,10 +16,19 @@ def render_gestion_reclamos(df_reclamos, df_clientes, sheet_reclamos, user):
         st.info("Aún no hay reclamos cargados.")
         return
 
-    # Preparar datos
-    df_reclamos["Fecha y hora"] = pd.to_datetime(df_reclamos["Fecha y hora"], errors='coerce')
-    df_reclamos["Fecha_formateada"] = df_reclamos["Fecha y hora"].apply(lambda f: format_fecha(f) if pd.notna(f) else "Sin fecha")
-    df_merged = pd.merge(df_reclamos, df_clientes[["Nº Cliente", "Teléfono"]], on="Nº Cliente", how="left")
+    # --- Preparación de Datos Robusta ---
+    df_reclamos_copy = df_reclamos.copy()
+    df_clientes_copy = df_clientes.copy()
+
+    # Asegurar que la clave de unión ('Nº Cliente') sea del mismo tipo y esté limpia.
+    df_reclamos_copy["Nº Cliente"] = df_reclamos_copy["Nº Cliente"].astype(str).str.strip()
+    df_clientes_copy["Nº Cliente"] = df_clientes_copy["Nº Cliente"].astype(str).str.strip()
+
+    df_reclamos_copy["Fecha y hora"] = pd.to_datetime(df_reclamos_copy["Fecha y hora"], errors='coerce')
+    df_reclamos_copy["Fecha_formateada"] = df_reclamos_copy["Fecha y hora"].apply(lambda f: format_fecha(f) if pd.notna(f) else "Sin fecha")
+
+    # Unir los dataframes
+    df_merged = pd.merge(df_reclamos_copy, df_clientes_copy[["Nº Cliente", "Teléfono"]], on="Nº Cliente", how="left")
     df_merged.sort_values("Fecha y hora", ascending=False, inplace=True)
 
     # 1. Mini-Dashboard de conteo de reclamos por tipo
@@ -40,19 +49,14 @@ def render_gestion_reclamos(df_reclamos, df_clientes, sheet_reclamos, user):
 def _render_conteo_dashboard(df_reclamos):
     """Muestra el conteo total de reclamos activos como un mini-dashboard."""
     st.subheader("📈 Conteo de Reclamos Activos por Tipo")
-
     df_activos = df_reclamos[df_reclamos["Estado"].isin(["Pendiente", "En curso"])]
-
     if df_activos.empty:
         st.info("No hay reclamos activos (pendientes o en curso).")
         return
-
     conteo = df_activos.groupby("Tipo de reclamo").size()
-
     num_tipos = len(conteo)
     if num_tipos == 0: return
-
-    cols = st.columns(num_tipos if num_tipos <= 5 else 5) # Max 5 columnas para legibilidad
+    cols = st.columns(num_tipos if num_tipos <= 5 else 5)
     i = 0
     for tipo, total in conteo.items():
         with cols[i % 5]:
@@ -76,14 +80,15 @@ def _mostrar_filtros_y_tabla(df):
     if sector != "Todos": df_filtrado = df_filtrado[df_filtrado["Sector"] == str(sector)]
     if tipo != "Todos": df_filtrado = df_filtrado[df_filtrado["Tipo de reclamo"] == tipo]
 
-    # Tomar los 20 más recientes DESPUÉS de filtrar
     df_display = df_filtrado.head(20)
-
     st.markdown(f"**Mostrando {len(df_display)} de {len(df_filtrado)} reclamos encontrados**")
 
-    columnas_a_mostrar = ["Fecha_formateada", "Nº Cliente", "Nombre", "Sector", "Tipo de reclamo", "Teléfono", "Estado"]
+    # --- Selección de columnas robusta ---
+    columnas_deseadas = ["Fecha_formateada", "Nº Cliente", "Nombre", "Sector", "Tipo de reclamo", "Teléfono", "Estado"]
+    columnas_existentes = [col for col in columnas_deseadas if col in df_display.columns]
+
     st.dataframe(
-        df_display[columnas_a_mostrar].rename(columns={"Fecha_formateada": "Fecha y hora"}),
+        df_display[columnas_existentes].rename(columns={"Fecha_formateada": "Fecha y hora"}),
         use_container_width=True,
         hide_index=True,
         height=400
@@ -112,19 +117,15 @@ def _render_edit_form(reclamo, df_reclamos, sheet_reclamos):
             estado_options = ["Pendiente", "En curso", "Resuelto", "Desconexión"]
             estado_idx = estado_options.index(reclamo['Estado']) if reclamo['Estado'] in estado_options else 0
             estado = st.selectbox("Estado", estado_options, index=estado_idx)
-
             tecnico_options = [""] + TECNICOS_DISPONIBLES
             tecnico_idx = tecnico_options.index(reclamo["Técnico"]) if reclamo.get("Técnico") in tecnico_options else 0
             tecnico = st.selectbox("Técnico Asignado", options=tecnico_options, index=tecnico_idx)
         with c2:
             tipo_idx = TIPOS_RECLAMO.index(reclamo['Tipo de reclamo']) if reclamo['Tipo de reclamo'] in TIPOS_RECLAMO else 0
             tipo_reclamo = st.selectbox("Tipo de Reclamo", options=TIPOS_RECLAMO, index=tipo_idx)
-
             sector_idx = SECTORES_DISPONIBLES.index(reclamo['Sector']) if reclamo['Sector'] in SECTORES_DISPONIBLES else 0
             sector = st.selectbox("Sector", options=SECTORES_DISPONIBLES, index=sector_idx)
-
         detalles = st.text_area("Detalles", value=reclamo['Detalles'])
-
         if st.form_submit_button("💾 Guardar Cambios"):
             updates = {"Estado": estado, "Técnico": tecnico, "Tipo de reclamo": tipo_reclamo, "Sector": sector, "Detalles": detalles}
             if _actualizar_fila_reclamo(reclamo['ID Reclamo'], df_reclamos, sheet_reclamos, updates):
@@ -136,15 +137,10 @@ def _render_edit_form(reclamo, df_reclamos, sheet_reclamos):
 def _render_desconexiones(df_reclamos, sheet_reclamos):
     """Muestra la lista de desconexiones a pedido para marcarlas como resueltas."""
     st.subheader("🔌 Desconexiones a Pedido")
-
-    df_desconexiones = df_reclamos[
-        (df_reclamos["Tipo de reclamo"] == "Desconexión a Pedido") &
-        (df_reclamos["Estado"] == "Desconexión")
-    ]
+    df_desconexiones = df_reclamos[(df_reclamos["Tipo de reclamo"] == "Desconexión a Pedido") & (df_reclamos["Estado"] == "Desconexión")]
     if df_desconexiones.empty:
         st.info("No hay desconexiones pendientes de resolver.")
         return
-
     for _, row in df_desconexiones.iterrows():
         col1, col2, col3 = st.columns([2, 2, 1])
         with col1: st.markdown(f"**{row['Nombre']}** (`{row['Nº Cliente']}`)")
@@ -163,12 +159,9 @@ def _actualizar_fila_reclamo(reclamo_id, df_reclamos, sheet_reclamos, updates):
     try:
         fila_idx = df_reclamos.index[df_reclamos["ID Reclamo"] == reclamo_id].tolist()[0]
         fila_google_sheets = fila_idx + 2
-
         column_map = {"Estado": "I", "Técnico": "J", "Tipo de reclamo": "G", "Sector": "C", "Detalles": "H"}
         update_payload = [{"range": f"{column_map[key]}{fila_google_sheets}", "values": [[str(value)]]} for key, value in updates.items() if key in column_map]
-
         if not update_payload: return False
-
         success, _ = api_manager.safe_sheet_operation(batch_update_sheet, sheet_reclamos, update_payload, is_batch=True)
         return success
     except Exception as e:
