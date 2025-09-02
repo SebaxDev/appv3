@@ -256,12 +256,9 @@ def _procesar_envio_formulario(estado, nombre, direccion, telefono, sector, tipo
             ]
 
             # --- Interacción con Google Sheets ---
-            # Se utiliza un manejador de API para encapsular la lógica de reintentos y errores.
             success, error = api_manager.safe_sheet_operation(
                 sheet_reclamos.append_row,
-                fila_reclamo,
-                body={'values': [fila_reclamo]},
-                is_batch=False # Aunque es una sola fila, es buena práctica ser explícito
+                fila_reclamo
             )
 
             if success:

@@ -351,7 +351,6 @@ opcion = st.session_state.get('current_page', 'Inicio')
 render_main_navigation()
 
 # --- CARGA DE DATOS ---
-@st.cache_data(ttl=60, show_spinner="Cargando datos...")
 def cargar_datos_completos(sheet_reclamos, sheet_clientes, sheet_usuarios):
     df_r = safe_get_sheet_data(sheet_reclamos, COLUMNAS_RECLAMOS)
     df_c = safe_get_sheet_data(sheet_clientes, COLUMNAS_CLIENTES)
