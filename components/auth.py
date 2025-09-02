@@ -34,37 +34,34 @@ def logout():
     st.cache_data.clear()  # Limpiar caché de datos
 
 def verify_credentials(username, password, sheet_usuarios):
-    """Verifica las credenciales del usuario usando hasheo de contraseñas."""
+    """Verifica las credenciales del usuario usando password en texto plano (Google Sheets)."""
     try:
         df_usuarios = safe_get_sheet_data(sheet_usuarios, COLUMNAS_USUARIOS)
         
         # Normalización de datos
-        df_usuarios["username"] = df_usuarios["username"].str.strip().str.lower()
+        df_usuarios["username"] = df_usuarios["username"].astype(str).str.strip().str.lower()
+        df_usuarios["password"] = df_usuarios["password"].astype(str).str.strip()
         
         # Manejo flexible de campo 'activo'
-        df_usuarios["activo"] = df_usuarios["activo"].astype(str).str.upper().isin(["SI", "TRUE", "1", "SÍ", "VERDADERO"])
+        df_usuarios["activo"] = df_usuarios["activo"].astype(str).str.upper().isin(
+            ["SI", "TRUE", "1", "SÍ", "VERDADERO"]
+        )
         
-        # Busca el usuario por nombre de usuario
-        user_data = df_usuarios[df_usuarios["username"] == username.strip().lower()]
+        # Busca el usuario válido
+        usuario = df_usuarios[
+            (df_usuarios["username"] == username.strip().lower()) & 
+            (df_usuarios["password"] == password.strip()) &
+            (df_usuarios["activo"])
+        ]
         
-        if not user_data.empty:
-            # Extrae la primera fila de datos del usuario
-            usuario = user_data.iloc[0]
-
-            # Verifica si el usuario está activo
-            if not usuario["activo"]:
-                return None  # Usuario inactivo
-
-            # Verifica la contraseña usando el hash
-            stored_hash = usuario["password_hash"]
-            if pwd_context.verify(password, stored_hash):
-                return {
-                    "username": usuario["username"],
-                    "nombre": usuario["nombre"],
-                    "rol": usuario["rol"].lower(),
-                    "permisos": PERMISOS_POR_ROL.get(usuario["rol"].lower(), {}).get('permisos', [])
-                }
-
+        if not usuario.empty:
+            u = usuario.iloc[0]
+            return {
+                "username": u["username"],
+                "nombre": u["nombre"],
+                "rol": str(u["rol"]).lower(),
+                "permisos": PERMISOS_POR_ROL.get(str(u["rol"]).lower(), {}).get("permisos", [])
+            }
     except Exception as e:
         st.error(f"Error en autenticación: {str(e)}")
     return None
