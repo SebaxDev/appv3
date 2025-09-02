@@ -358,16 +358,18 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # User bar
-cols = st.columns([2, 1, 1, 1])
-with cols[0]:
+left_space, user_col, controls_col, logout_col = st.columns([2, 2, 1, 1])
+
+with user_col:
     render_user_info()
-with cols[1]:
-    st.checkbox("🌙 Modo Oscuro", value=st.session_state.modo_oscuro, key=MODO_OSCURO_KEY, on_change=_on_toggle_modo_oscuro)
-with cols[2]:
+
+with controls_col:
+    st.checkbox("🌙", value=st.session_state.modo_oscuro, key=MODO_OSCURO_KEY, on_change=_on_toggle_modo_oscuro, help="Activar modo oscuro")
     if st.session_state.auth.get("logged_in", False):
         render_notification_bell()
-with cols[3]:
-    if st.button("🚪 Cerrar sesión", use_container_width=True):
+
+with logout_col:
+    if st.button("Salir 🚪", use_container_width=True):
         st.session_state.auth['logged_in'] = False
         st.session_state.auth['user_info'] = {}
         st.rerun()
