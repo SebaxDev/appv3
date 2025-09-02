@@ -91,13 +91,14 @@ def get_main_styles_v2(dark_mode=True):
         line-height: 1.6;
     }}
     
-    /* MEJORAS PARA CONTENEDORES PRINCIPALES - ANCHO EXPANDIDO */
+    /* MEJORAS PARA CONTENEDORES PRINCIPALES - ANCHO AJUSTADO */
     .main .block-container {{
-        max-width: 1500px !important;
+        max-width: 1300px !important;
+        margin: 0 auto !important;
         padding-top: 2rem;
         padding-bottom: 2rem;
-        padding-left: 3rem;
-        padding-right: 3rem;
+        padding-left: 2rem;
+        padding-right: 2rem;
     }}
     
     /* Cuando el sidebar está colapsado, expandimos el ancho */
@@ -382,32 +383,16 @@ def get_main_styles_v2(dark_mode=True):
         width: 100% !important;
     }}
     
-    /* NOTIFICACIONES Y ALERTAS MEJORADAS */
+    /* ALERTAS MEJORADAS */
     .stAlert {{
         border-radius: var(--radius-lg);
         border: none;
         box-shadow: var(--shadow-md);
         padding: 1rem 1.5rem;
         margin-bottom: 1rem;
-    }}
-
-    .stAlert[data-baseweb="notification"] {{
-        background-color: var(--bg-surface);
         border-left: 4px solid var(--info-color);
     }}
     
-    .stAlert[data-baseweb="notification"].success {{
-        border-left-color: var(--success-color);
-    }}
-
-    .stAlert[data-baseweb="notification"].warning {{
-        border-left-color: var(--warning-color);
-    }}
-
-    .stAlert[data-baseweb="notification"].error {{
-        border-left-color: var(--danger-color);
-    }}
-
     /* BADGES Y ETIQUETAS */
     .badge {{
         display: inline-flex;
