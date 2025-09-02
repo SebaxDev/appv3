@@ -37,31 +37,31 @@ def get_main_styles_v2(dark_mode=True):
             --radius-xl: 0.75rem;
         """
     else:
-        # PALETA ORIGINAL (modo claro profesional)
+        # --- NUEVO TEMA CLARO ESTILO MONOKAI ---
         theme_vars = """
-            --primary-color: #3B82F6;
-            --primary-light: #60A5FA;
-            --secondary-color: #8B5CF6;
-            --success-color: #10B981;
-            --warning-color: #F59E0B;
-            --danger-color: #EF4444;
-            --info-color: #06B6D4;
+            --primary-color: #F92672;   /* Magenta Monokai */
+            --primary-light: #ff79c6;   /* Rosa más claro para hover */
+            --secondary-color: #AE81FF; /* Púrpura Monokai */
+            --success-color: #50fa7b;   /* Verde Dracula/Monokai brillante */
+            --warning-color: #FD971F;   /* Naranja Monokai */
+            --danger-color: #ff5555;    /* Rojo Dracula */
+            --info-color: #66D9EF;      /* Cian Monokai */
             
-            --bg-primary: #FFFFFF;
+            --bg-primary: #FDFDFD;
             --bg-secondary: #F8FAFC;
             --bg-surface: #F1F5F9;
             --bg-card: #FFFFFF;
             
-            --text-primary: #1E293B;
-            --text-secondary: #475569;
-            --text-muted: #64748B;
+            --text-primary: #282a36;    /* Texto oscuro (Dracula bg) */
+            --text-secondary: #44475a;  /* Texto gris (Dracula comment) */
+            --text-muted: #999999;
             
             --border-color: #E2E8F0;
             --border-light: #F1F5F9;
             
             --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
-            --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
-            --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
+            --shadow-md: 0 3px 6px rgba(0,0,0,0.06);
+            --shadow-lg: 0 8px 16px rgba(0,0,0,0.08);
             
             --radius-sm: 0.25rem;
             --radius-md: 0.375rem;
