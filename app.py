@@ -340,7 +340,7 @@ header_cols = st.columns([4, 1, 1])
 with header_cols[0]:
     render_user_info()
 with header_cols[1]:
-    st.checkbox("🌙", value=st.session_state.get(MODO_OSCURO_KEY, False), key=MODO_OSCURO_KEY, on_change=_on_toggle_modo_oscuro, help="Modo oscuro")
+    st.checkbox("🌙", value=st.session_state.modo_oscuro, key=MODO_OSCURO_KEY, on_change=_on_toggle_modo_oscuro, help="Modo oscuro")
 with header_cols[2]:
     if st.button("Salir 🚪", use_container_width=True):
         st.session_state.auth['logged_in'] = False
@@ -350,89 +350,36 @@ with header_cols[2]:
 opcion = st.session_state.get('current_page', 'Inicio')
 render_main_navigation()
 
-# --------------------------
-# RUTEO DE COMPONENTES
-# --------------------------
+# --- CARGA DE DATOS ---
+@st.cache_data(ttl=60, show_spinner="Cargando datos...")
+def cargar_datos_completos(sheet_reclamos, sheet_clientes, sheet_usuarios):
+    df_r = safe_get_sheet_data(sheet_reclamos, COLUMNAS_RECLAMOS)
+    df_c = safe_get_sheet_data(sheet_clientes, COLUMNAS_CLIENTES)
+    df_u = safe_get_sheet_data(sheet_usuarios, COLUMNAS_USUARIOS)
+    return df_r, df_c, df_u
 
+df_reclamos, df_clientes, df_usuarios = cargar_datos_completos(sheet_reclamos, sheet_clientes, sheet_usuarios)
+
+# --- RUTEO DE COMPONENTES ---
 COMPONENTES = {
-    "Inicio": {
-        "render": render_nuevo_reclamo,
-        "permiso": "inicio",
-        "params": {
-            "df_reclamos": df_reclamos,
-            "df_clientes": df_clientes,
-            "sheet_reclamos": sheet_reclamos,
-            "sheet_clientes": sheet_clientes,
-            "current_user": user_info.get('nombre', '')
-        }
-    },
-    "Reclamos cargados": {
-        "render": render_gestion_reclamos,
-        "permiso": "reclamos_cargados",
-        "params": {
-            "df_reclamos": df_reclamos,
-            "df_clientes": df_clientes,
-            "sheet_reclamos": sheet_reclamos,
-            "user": user_info
-        }
-    },
-    "Gestión de clientes": {
-        "render": render_gestion_clientes,
-        "permiso": "gestion_clientes",
-        "params": {
-            "df_clientes": df_clientes,
-            "df_reclamos": df_reclamos,
-            "sheet_clientes": sheet_clientes,
-            "user_role": user_info.get('rol', '')
-        }
-    },
-    "Imprimir reclamos": {
-        "render": render_impresion_reclamos,
-        "permiso": "imprimir_reclamos",
-        "params": {
-            "df_clientes": df_clientes,
-            "df_reclamos": df_reclamos,
-            "user": user_info
-        }
-    },
-    "Seguimiento técnico": {
-        "render": render_planificacion_grupos,
-        "permiso": "seguimiento_tecnico",
-        "params": {
-            "df_reclamos": df_reclamos,
-            "sheet_reclamos": sheet_reclamos,
-            "user": user_info
-        }
-    },
-    "Cierre de Reclamos": {
-        "render": render_cierre_reclamos,
-        "permiso": "cierre_reclamos",
-        "params": {
-            "df_reclamos": df_reclamos,
-            "df_clientes": df_clientes,
-            "sheet_reclamos": sheet_reclamos,
-            "sheet_clientes": sheet_clientes,
-            "user": user_info
-        }
-    }
+    "Inicio": {"render": render_nuevo_reclamo, "permiso": "inicio", "params": {"df_reclamos": df_reclamos, "df_clientes": df_clientes, "sheet_reclamos": sheet_reclamos, "sheet_clientes": sheet_clientes, "current_user": user_info.get('nombre', '')}},
+    "Reclamos cargados": {"render": render_gestion_reclamos, "permiso": "reclamos_cargados", "params": {"df_reclamos": df_reclamos, "df_clientes": df_clientes, "sheet_reclamos": sheet_reclamos, "user": user_info}},
+    "Gestión de clientes": {"render": render_gestion_clientes, "permiso": "gestion_clientes", "params": {"df_clientes": df_clientes, "df_reclamos": df_reclamos, "sheet_clientes": sheet_clientes, "user_role": user_role}},
+    "Imprimir reclamos": {"render": render_impresion_reclamos, "permiso": "imprimir_reclamos", "params": {"df_clientes": df_clientes, "df_reclamos": df_reclamos, "user": user_info}},
+    "Seguimiento técnico": {"render": render_planificacion_grupos, "permiso": "seguimiento_tecnico", "params": {"df_reclamos": df_reclamos, "sheet_reclamos": sheet_reclamos, "user": user_info}},
+    "Cierre de Reclamos": {"render": render_cierre_reclamos, "permiso": "cierre_reclamos", "params": {"df_reclamos": df_reclamos, "df_clientes": df_clientes, "sheet_reclamos": sheet_reclamos, "sheet_clientes": sheet_clientes, "user": user_info}},
 }
 
-# Renderizar componente seleccionado
 if opcion in COMPONENTES and has_permission(COMPONENTES[opcion]["permiso"]):
     with st.container():
         st.markdown("---")
         resultado = COMPONENTES[opcion]["render"](**COMPONENTES[opcion]["params"])
-        
         if resultado and resultado.get('needs_refresh'):
             st.cache_data.clear()
-            time.sleep(1)
             st.rerun()
 
-# --------------------------
-# FOOTER Y RESUMEN
-# --------------------------
+# --- FOOTER Y RESUMEN ---
 st.markdown("---")
 with st.container():
     render_resumen_jornada(df_reclamos)
-
 st.markdown(f"""<div style="text-align:center; font-size:0.8rem; color: var(--text-muted); padding-top: 2rem;">Desarrollado con 💜 por Sebastián Andrés (v2.6)</div>""", unsafe_allow_html=True)
