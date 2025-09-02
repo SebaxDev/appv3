@@ -53,7 +53,6 @@ from components.notifications import init_notification_manager
 from components.notification_bell import render_notification_bell
 from components.auth import has_permission, check_authentication, render_login
 from components.new_navigation import render_main_navigation, render_user_info
-from components.ui import breadcrumb, metric_card, card, badge, loading_indicator
 from utils.helpers import show_warning, show_error, show_success, show_info, format_phone_number, format_dni, get_current_datetime, format_datetime, truncate_text, is_valid_email, safe_float_conversion, safe_int_conversion, get_status_badge, format_currency, get_breadcrumb_icon
 
 # Utils
