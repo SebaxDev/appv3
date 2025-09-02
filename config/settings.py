@@ -10,7 +10,7 @@ import streamlit as st
 # Lee el ID de la hoja de cálculo desde los secretos de Streamlit para mayor seguridad.
 # Asegúrate de tener un archivo .streamlit/secrets.toml con la siguiente línea:
 # SHEET_ID = "tu-id-de-google-sheet"
-SHEET_ID = st.secrets["SHEET_ID"]
+SHEET_ID = "13R_3Mdr25Jd-nGhK7CxdcbKkFWLc0LPdYrOLOY8sZJo"
 WORKSHEET_RECLAMOS = "Reclamos"
 WORKSHEET_CLIENTES = "Clientes"
 WORKSHEET_USUARIOS = "usuarios"
