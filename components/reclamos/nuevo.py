@@ -278,15 +278,6 @@ def _procesar_envio_formulario(estado, nombre, direccion, telefono, sector, tipo
                     direccion, telefono, precinto, df_clientes, sheet_clientes
                 )
                 
-                # Notificación
-                if 'notification_manager' in st.session_state:
-                    st.session_state.notification_manager.add(
-                        notification_type="nuevo_reclamo",
-                        message=f"📝 Nuevo reclamo {id_reclamo} - {tipo_reclamo}",
-                        user_target="all",
-                        claim_id=id_reclamo
-                    )
-                
                 st.cache_data.clear()
 
                 # 🔄 Forzar recarga para limpiar el formulario y mostrar reclamo activo

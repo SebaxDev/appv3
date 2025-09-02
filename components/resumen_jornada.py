@@ -68,43 +68,7 @@ def render_resumen_jornada(df_reclamos):
         else:
             st.info("No hay reclamos en curso en este momento.")
 
-        _notificar_reclamos_no_asignados(df_copy)
-
     except Exception as e:
         st.error(f"Error al generar resumen: {str(e)}")
         if DEBUG_MODE:
-            st.exception(e)
-
-def _notificar_reclamos_no_asignados(df):
-    """
-    Detecta reclamos sin técnico hace más de 36 horas y notifica globalmente (una vez).
-    """
-    if 'notification_manager' not in st.session_state or st.session_state.notification_manager is None:
-        return
-
-    ahora = ahora_argentina()
-    umbral = ahora - timedelta(hours=36)
-
-    df_filtrado = df[
-        (df["Estado"].isin(["Pendiente", "En curso"])) &
-        (df["Técnico"].isna() | (df["Técnico"].str.strip() == "")) &
-        (pd.to_datetime(df["Fecha y hora"], errors='coerce') < umbral)
-    ].copy()
-
-    if df_filtrado.empty:
-        return
-
-    try:
-        if st.session_state.get("unassigned_claim_notified", False):
-            return
-        mensaje = f"Hay {len(df_filtrado)} reclamos sin técnico asignado desde hace más de 36 horas."
-        st.session_state.notification_manager.add(
-            notification_type="unassigned_claim",
-            message=mensaje,
-            user_target="all"
-        )
-        st.session_state.unassigned_claim_notified = True
-    except Exception as e:
-        if DEBUG_MODE:
-            st.warning("⚠️ No se pudo generar la notificación global de reclamos no asignados.")
             st.exception(e)
