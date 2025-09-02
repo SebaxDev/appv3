@@ -37,77 +37,63 @@ def render_impresion_reclamos(df_reclamos, df_clientes, user):
     st.subheader("📨️ Seleccionar reclamos para imprimir (formato técnico compacto)")
 
     try:
-        # Preparar datos con información del usuario
         df_merged = _preparar_datos(df_reclamos, df_clientes, user)
-
-        # Mostrar reclamos pendientes
         _mostrar_reclamos_pendientes(df_merged)
 
-        # Configuración de impresión
         with st.expander("⚙️ Configuración de impresión", expanded=True):
-            col1, col2 = st.columns(2)
-            with col1:
-                solo_pendientes = st.checkbox(
-                    "📜 Mostrar solo reclamos pendientes",
-                    value=True
-                )
-            with col2:
-                incluir_usuario = st.checkbox(
-                    "👤 Incluir mi nombre en el PDF",
-                    value=True
-                )
+            solo_pendientes = st.checkbox("📜 Mostrar solo reclamos pendientes", value=True)
+            incluir_usuario = st.checkbox("👤 Incluir mi nombre en el PDF", value=True)
 
-        # Nueva opción para imprimir todos los pendientes
-        mensaje_todos = _generar_pdf_todos_pendientes(df_merged, user if incluir_usuario else None)
-        if mensaje_todos:
-            result['message'] = mensaje_todos
+        st.markdown("---")
+        st.subheader("Opciones de Impresión")
 
-        # Impresión por tipo
-        mensaje_tipo = _generar_pdf_por_tipo(df_merged, solo_pendientes, user if incluir_usuario else None)
-        if mensaje_tipo:
-            result['message'] = mensaje_tipo
+        # --- Fila 1 ---
+        col1, col2 = st.columns(2)
+        with col1:
+            with st.container(border=True):
+                mensaje_todos = _generar_pdf_todos_pendientes(df_merged, user if incluir_usuario else None)
+                if mensaje_todos: result['message'] = mensaje_todos
+        with col2:
+            with st.container(border=True):
+                mensaje_tipo = _generar_pdf_por_tipo(df_merged, solo_pendientes, user if incluir_usuario else None)
+                if mensaje_tipo: result['message'] = mensaje_tipo
         
-        # Impresión manual
-        mensaje_manual = _generar_pdf_manual(df_merged, solo_pendientes, user if incluir_usuario else None)
-        if mensaje_manual:
-            result['message'] = mensaje_manual
+        # --- Fila 2 ---
+        col3, col4 = st.columns(2)
+        with col3:
+            with st.container(border=True):
+                mensaje_manual = _generar_pdf_manual(df_merged, solo_pendientes, user if incluir_usuario else None)
+                if mensaje_manual: result['message'] = mensaje_manual
+        with col4:
+            with st.container(border=True):
+                mensaje_desconexiones = _generar_pdf_desconexiones(df_merged, user if incluir_usuario else None)
+                if mensaje_desconexiones: result['message'] = mensaje_desconexiones
 
-        # Impresión Desconexiones
-        mensaje_desconexiones = _generar_pdf_desconexiones(df_merged, user if incluir_usuario else None)
-        if mensaje_desconexiones:
-            result['message'] = mensaje_desconexiones
-
-        # Impresión En Curso por Técnico
-        mensaje_en_curso = _generar_pdf_en_curso_por_tecnico(df_merged, user if incluir_usuario else None)
-        if mensaje_en_curso:
-            result['message'] = mensaje_en_curso
-
+        # --- Fila 3 ---
+        col5, col6 = st.columns(2)
+        with col5:
+            with st.container(border=True):
+                mensaje_en_curso = _generar_pdf_en_curso_por_tecnico(df_merged, user if incluir_usuario else None)
+                if mensaje_en_curso: result['message'] = mensaje_en_curso
+        with col6:
+            with st.container(border=True):
+                st.markdown("### 📄 Generar Reporte Diario (PNG)")
+                if st.button("🖼️ Generar imagen del día", use_container_width=True):
+                    img_buffer = generar_reporte_diario_imagen(df_reclamos)
+                    fecha_hoy = ahora_argentina().strftime("%Y-%m-%d")
+                    st.download_button(
+                        label="⬇️ Descargar Reporte Diario",
+                        data=img_buffer,
+                        file_name=f"reporte_diario_{fecha_hoy}.png",
+                        mime="image/png",
+                        use_container_width=True
+                    )
 
     except Exception as e:
         st.error(f"❌ Error al generar PDF: {str(e)}")
         result['message'] = f"Error al generar PDF: {str(e)}"
         if DEBUG_MODE:
             st.exception(e)
-    finally:
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    # === NUEVA SECCIÓN: Reporte Diario ===
-    st.markdown("### 📄 Generar Reporte Diario (PNG)")
-
-    # Definir columna para el botón (centrado)
-    _, col_img, _ = st.columns([1, 2, 1])
-
-    with col_img:
-        if st.button("🖼️ Generar imagen del día"):
-            # Usar el dataframe que recibió el componente (más confiable y testeable)
-            img_buffer = generar_reporte_diario_imagen(df_reclamos)
-            fecha_hoy = ahora_argentina().strftime("%Y-%m-%d")
-            st.download_button(
-                label="⬇️ Descargar Reporte Diario",
-                data=img_buffer,
-                file_name=f"reporte_diario_{fecha_hoy}.png",
-                mime="image/png"
-            )
 
 
     return result
