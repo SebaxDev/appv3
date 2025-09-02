@@ -37,30 +37,33 @@ def verify_credentials(username, password, sheet_usuarios):
     """Verifica las credenciales del usuario usando password en texto plano (Google Sheets)."""
     try:
         df_usuarios = safe_get_sheet_data(sheet_usuarios, COLUMNAS_USUARIOS)
-        
+
         # Normalización de datos
         df_usuarios["username"] = df_usuarios["username"].astype(str).str.strip().str.lower()
         df_usuarios["password"] = df_usuarios["password"].astype(str).str.strip()
-        
+        df_usuarios["rol"] = df_usuarios["rol"].astype(str).str.strip().str.lower()
+        df_usuarios["nombre"] = df_usuarios["nombre"].astype(str).str.strip()
+
         # Manejo flexible de campo 'activo'
         df_usuarios["activo"] = df_usuarios["activo"].astype(str).str.upper().isin(
             ["SI", "TRUE", "1", "SÍ", "VERDADERO"]
         )
-        
-        # Busca el usuario válido
+
+        # Buscar el usuario válido
         usuario = df_usuarios[
-            (df_usuarios["username"] == username.strip().lower()) & 
+            (df_usuarios["username"] == username.strip().lower()) &
             (df_usuarios["password"] == password.strip()) &
             (df_usuarios["activo"])
         ]
-        
+
         if not usuario.empty:
             u = usuario.iloc[0]
             return {
                 "username": u["username"],
                 "nombre": u["nombre"],
-                "rol": str(u["rol"]).lower(),
-                "permisos": PERMISOS_POR_ROL.get(str(u["rol"]).lower(), {}).get("permisos", [])
+                "rol": u["rol"],
+                "modo_oscuro": u.get("modo_oscuro", "FALSE"),
+                "permisos": PERMISOS_POR_ROL.get(u["rol"], {}).get("permisos", [])
             }
     except Exception as e:
         st.error(f"Error en autenticación: {str(e)}")

@@ -52,7 +52,7 @@ COLUMNAS_CLIENTES = [
 ]
 
 COLUMNAS_USUARIOS = [
-    "username", "password_hash", "nombre", "rol", "activo", "modo_oscuro"
+    "username", "password", "nombre", "rol", "activo", "modo_oscuro"
 ]
 
 # --------------------------
