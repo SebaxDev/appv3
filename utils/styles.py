@@ -91,14 +91,13 @@ def get_main_styles_v2(dark_mode=True):
         line-height: 1.6;
     }}
     
-    /* MEJORAS PARA CONTENEDORES PRINCIPALES - ANCHO AJUSTADO */
+    /* MEJORAS PARA CONTENEDORES PRINCIPALES - ANCHO EXPANDIDO */
     .main .block-container {{
-        max-width: 1300px !important;
-        margin: 0 auto !important;
+        max-width: 1500px !important;
         padding-top: 2rem;
         padding-bottom: 2rem;
-        padding-left: 2rem;
-        padding-right: 2rem;
+        padding-left: 3rem;
+        padding-right: 3rem;
     }}
     
     /* Cuando el sidebar está colapsado, expandimos el ancho */
