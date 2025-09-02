@@ -600,6 +600,14 @@ def _guardar_cambios(df_reclamos, sheet_reclamos, grupos_activos):
             success, error = api_manager.safe_sheet_operation(batch_update_sheet, sheet_reclamos, updates, is_batch=True)
             if success:
                 st.success("✅ Reclamos actualizados correctamente en la hoja.")
+                if 'notification_manager' in st.session_state:
+                    for n in notificaciones:
+                        mensaje = f"📋 Se asignaron {n['cantidad']} reclamos a {n['grupo']} (Técnicos: {n['tecnicos']})."
+                        st.session_state.notification_manager.add(
+                            notification_type="reclamo_asignado",
+                            message=mensaje,
+                            user_target="all"
+                        )
                 return True
             else:
                 st.error("❌ Error al actualizar: " + str(error))

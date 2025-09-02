@@ -345,6 +345,16 @@ def _actualizar_cliente(cliente_row, sheet_clientes, nuevo_sector, nuevo_nombre,
 
             if success:
                 st.success("✅ Cliente actualizado correctamente.")
+
+                if 'notification_manager' in st.session_state:
+                    num_cliente = str(cliente_actual['Nº Cliente'])
+                    nombre_cliente = str(nuevo_nombre).upper()
+                    mensaje = f"✏️ Se actualizaron los datos del cliente N° {num_cliente} - {nombre_cliente}."
+                    st.session_state.notification_manager.add(
+                        notification_type="cliente_actualizado",
+                        message=mensaje,
+                        user_target="all"
+                    )
                 return True
             else:
                 st.error(f"❌ Error al actualizar: {error}")
@@ -466,6 +476,15 @@ def _guardar_nuevo_cliente(df_clientes, sheet_clientes, nuevo_nro, nuevo_sector,
             if success:
                 st.success("✅ Nuevo cliente agregado correctamente.")
                 st.info(f"📋 Cliente: {nuevo_nombre.strip().upper()} - N° {nuevo_nro.strip()}")
+
+                if 'notification_manager' in st.session_state:
+                    mensaje = f"🆕 Se agregó el cliente N° {nuevo_nro.strip()} - {nuevo_nombre.strip().upper()} al sistema."
+                    st.session_state.notification_manager.add(
+                        notification_type="cliente_nuevo",
+                        message=mensaje,
+                        user_target="all"
+                    )
+
                 return True
             else:
                 st.error(f"❌ Error al guardar: {error}")
