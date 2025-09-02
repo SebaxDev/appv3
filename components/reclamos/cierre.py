@@ -1,16 +1,22 @@
 # components/reclamos/cierre.py
 
 import time
+from datetime import datetime
+import pytz
 import pandas as pd
 import streamlit as st
-import pytz
-from datetime import datetime
 
 from utils.date_utils import format_fecha, ahora_argentina, parse_fecha
 from utils.api_manager import api_manager
 from utils.data_manager import batch_update_sheet
-from config.settings import TECNICOS_DISPONIBLES, COLUMNAS_RECLAMOS, DEBUG_MODE
+from config.settings import (
+    SECTORES_DISPONIBLES,
+    TECNICOS_DISPONIBLES,
+    COLUMNAS_RECLAMOS,
+    DEBUG_MODE
+)
 
+# === Helpers para mapear nombre de columna -> letra de Excel ===
 def _excel_col_letter(n: int) -> str:
     letters = ""
     while n:
@@ -19,193 +25,391 @@ def _excel_col_letter(n: int) -> str:
     return letters
 
 def _col_letter(col_name: str) -> str:
-    try:
-        idx = COLUMNAS_RECLAMOS.index(col_name) + 1
-        return _excel_col_letter(idx)
-    except (ValueError, IndexError):
-        st.warning(f"Advertencia: La columna '{col_name}' no se encontró en la configuración.")
-        return None
+    # Usa la lista oficial de columnas de la app
+    idx = COLUMNAS_RECLAMOS.index(col_name) + 1
+    return _excel_col_letter(idx)
+
+def mostrar_overlay_cargando(mensaje="Procesando..."):
+    """Muestra un spinner simple de Streamlit"""
+    return st.spinner(mensaje)
 
 def render_cierre_reclamos(df_reclamos, df_clientes, sheet_reclamos, sheet_clientes, user):
-    st.header("✅ Cierre y Gestión de Reclamos")
+    result = {
+        'needs_refresh': False,
+        'message': None,
+        'data_updated': False
+    }
 
-    df_reclamos["ID Reclamo"] = df_reclamos["ID Reclamo"].astype(str).str.strip()
-    df_reclamos["Nº Cliente"] = df_reclamos["Nº Cliente"].astype(str).str.strip()
-    df_reclamos["Técnico"] = df_reclamos["Técnico"].astype(str).fillna("")
-    df_reclamos["Fecha y hora"] = df_reclamos["Fecha y hora"].apply(parse_fecha)
+    # 🚩 Si venimos de un cambio (resuelto/pendiente), forzar refresh de datos
+    if st.session_state.get('force_refresh'):
+        st.session_state['force_refresh'] = False
+        return {
+            'needs_refresh': True,
+            'message': 'Datos actualizados',
+            'data_updated': True
+        }
 
-    tab1, tab2, tab3 = st.tabs(["Cerrar Reclamos en Curso", "Reasignar Técnico", "Limpieza de Reclamos Antiguos"])
+    st.subheader("✅ Cierre de reclamos en curso")
 
-    with tab1:
-        st.subheader("📋 Lista de Reclamos en Curso")
-        if _mostrar_reclamos_en_curso(df_reclamos, df_clientes, sheet_reclamos, sheet_clientes):
-            st.rerun()
+    try:
+        # Normalización de datos
+        df_reclamos["ID Reclamo"] = df_reclamos["ID Reclamo"].astype(str).str.strip()
+        df_reclamos["Nº Cliente"] = df_reclamos["Nº Cliente"].astype(str).str.strip()
+        df_reclamos["Técnico"] = df_reclamos["Técnico"].astype(str).fillna("")
+        df_reclamos["Fecha y hora"] = df_reclamos["Fecha y hora"].apply(parse_fecha)
 
-    with tab2:
-        st.subheader("🔄 Reasignar Técnico por Nº de Cliente")
-        if _mostrar_reasignacion_tecnico(df_reclamos, sheet_reclamos):
-            st.rerun()
+        # Procesar cada sección
+        cambios_tecnicos = _mostrar_reasignacion_tecnico(df_reclamos, sheet_reclamos)
+        if cambios_tecnicos:
+            result.update({
+                'needs_refresh': True,
+                'message': 'Técnico reasignado correctamente',
+                'data_updated': True
+            })
+            return result
 
-    with tab3:
-        st.subheader("🗑️ Limpieza de Reclamos Antiguos")
-        if _mostrar_limpieza_reclamos(df_reclamos, sheet_reclamos):
-            st.rerun()
+        cambios_cierre = _mostrar_reclamos_en_curso(df_reclamos, df_clientes, sheet_reclamos, sheet_clientes)
+        if cambios_cierre:
+            result.update({
+                'needs_refresh': True,
+                'message': 'Estado de reclamos actualizado',
+                'data_updated': True
+            })
+            return result
 
-    return {'needs_refresh': False}
+        cambios_limpieza = _mostrar_limpieza_reclamos(df_reclamos, sheet_reclamos)
+        if cambios_limpieza:
+            result.update({
+                'needs_refresh': True,
+                'message': 'Reclamos antiguos eliminados',
+                'data_updated': True
+            })
+            return result
+
+    except Exception as e:
+        st.error(f"❌ Error en el cierre de reclamos: {str(e)}")
+        if DEBUG_MODE:
+            st.exception(e)
+        result['message'] = f"Error: {str(e)}"
+
+    return result
 
 def _mostrar_reasignacion_tecnico(df_reclamos, sheet_reclamos):
-    with st.container(border=True):
-        cliente_busqueda = st.text_input("🔢 Ingresa el N° de Cliente para buscar y reasignar", key="buscar_cliente_tecnico").strip()
-        if not cliente_busqueda:
-            st.info("Ingresa un número de cliente para comenzar.")
-            return False
+    st.markdown("### 🔄 Reasignar técnico por N° de cliente")
+    cliente_busqueda = st.text_input("🔢 Ingresá el N° de Cliente para buscar", key="buscar_cliente_tecnico").strip()
 
-        reclamos_filtrados = df_reclamos[(df_reclamos["Nº Cliente"] == cliente_busqueda) & (df_reclamos["Estado"].isin(["Pendiente", "En curso"]))]
-        if reclamos_filtrados.empty:
-            st.warning("⚠️ No se encontró un reclamo activo para ese cliente.")
-            return False
+    if not cliente_busqueda:
+        return False
 
-        reclamo = reclamos_filtrados.iloc[0]
-        st.markdown(f"**Reclamo encontrado:** {reclamo['Tipo de reclamo']} (`{reclamo['Estado']}`)")
-        st.caption(f"Técnico actual: **{reclamo['Técnico'] or 'No asignado'}** | Sector: **{reclamo.get('Sector', 'N/A')}**")
+    reclamos_filtrados = df_reclamos[
+        (df_reclamos["Nº Cliente"] == cliente_busqueda) &
+        (df_reclamos["Estado"].isin(["Pendiente", "En curso"]))
+    ]
 
-        tecnicos_actuales_raw = [t.strip().lower() for t in reclamo["Técnico"].split(",") if t.strip()]
-        tecnicos_actuales = [tecnico for tecnico in TECNICOS_DISPONIBLES if tecnico.lower() in tecnicos_actuales_raw]
-        nuevo_tecnico_multiselect = st.multiselect("👷 Asignar nuevo(s) técnico(s)", options=TECNICOS_DISPONIBLES, default=tecnicos_actuales, key="nuevo_tecnico_input")
+    if reclamos_filtrados.empty:
+        st.warning("⚠️ No se encontró un reclamo pendiente o en curso para ese cliente.")
+        return False
 
-        if st.button("💾 Guardar Nuevo Técnico", key="guardar_tecnico", use_container_width=True):
-            with st.spinner("Actualizando técnico..."):
+    reclamo = reclamos_filtrados.iloc[0]
+    st.markdown(f"📌 **Reclamo encontrado:** {reclamo['Tipo de reclamo']} - Estado: {reclamo['Estado']}")
+    st.markdown(f"👷 Técnico actual: `{reclamo['Técnico'] or 'No asignado'}`")
+    st.markdown(f"📅 Fecha del reclamo: `{format_fecha(reclamo['Fecha y hora'])}`")
+    st.markdown(f"📍 Sector: `{reclamo.get('Sector', 'No especificado')}`")
+
+    tecnicos_actuales_raw = [t.strip().lower() for t in reclamo["Técnico"].split(",") if t.strip()]
+    tecnicos_actuales = [tecnico for tecnico in TECNICOS_DISPONIBLES if tecnico.lower() in tecnicos_actuales_raw]
+
+    nuevo_tecnico_multiselect = st.multiselect(
+        "👷 Nuevo técnico asignado",
+        options=TECNICOS_DISPONIBLES,
+        default=tecnicos_actuales,
+        key="nuevo_tecnico_input"
+    )
+
+    if st.button("💾 Guardar nuevo técnico", key="guardar_tecnico"):
+        with st.spinner("Actualizando técnico..."):
+            try:
                 fila_index = reclamo.name + 2
                 nuevo_tecnico = ", ".join(nuevo_tecnico_multiselect).upper()
-                updates = [{"range": f"{_col_letter('Técnico')}{fila_index}", "values": [[nuevo_tecnico]]}]
+
+                col_tecnico = _col_letter("Técnico")
+                col_estado  = _col_letter("Estado")
+
+                updates = [{"range": f"{col_tecnico}{fila_index}", "values": [[nuevo_tecnico]]}]
                 if reclamo['Estado'] == "Pendiente":
-                    updates.append({"range": f"{_col_letter('Estado')}{fila_index}", "values": [["En curso"]]})
+                    updates.append({"range": f"{col_estado}{fila_index}", "values": [["En curso"]]})
+
+                success, error = api_manager.safe_sheet_operation(
+                    batch_update_sheet,
+                    sheet_reclamos,
+                    updates,
+                    is_batch=True
+                )
                 
-                success, error = api_manager.safe_sheet_operation(batch_update_sheet, sheet_reclamos, updates, is_batch=True)
                 if success:
                     st.success("✅ Técnico actualizado correctamente.")
-                    time.sleep(1)
+                    if 'notification_manager' in st.session_state and nuevo_tecnico:
+                        mensaje = f"📌 El cliente N° {reclamo['Nº Cliente']} fue asignado al técnico {nuevo_tecnico}."
+                        st.session_state.notification_manager.add(
+                            notification_type="reclamo_asignado",
+                            message=mensaje,
+                            user_target="all",
+                            claim_id=reclamo["ID Reclamo"]
+                        )
                     return True
                 else:
                     st.error(f"❌ Error al actualizar: {error}")
+                    if DEBUG_MODE:
+                        st.write("Detalles del error:", error)
+            except Exception as e:
+                st.error(f"❌ Error inesperado: {str(e)}")
+                if DEBUG_MODE:
+                    st.exception(e)
+
     return False
 
 def _mostrar_reclamos_en_curso(df_reclamos, df_clientes, sheet_reclamos, sheet_clientes):
     en_curso = df_reclamos[df_reclamos["Estado"] == "En curso"].copy()
-    tecnicos_unicos = sorted(set(tecnico.strip().upper() for t in en_curso["Técnico"] for tecnico in t.split(",") if tecnico.strip()))
-    tecnicos_seleccionados = st.multiselect("👷 Filtrar por técnico asignado", tecnicos_unicos, key="filtro_tecnicos_cierre")
 
-    if tecnicos_seleccionados:
-        en_curso = en_curso[en_curso["Técnico"].apply(lambda t: any(tecnico.strip().upper() in t.upper() for tecnico in tecnicos_seleccionados))]
+    filtro_sector = st.selectbox(
+        "🔢 Filtrar por sector",
+        ["Todos"] + sorted(SECTORES_DISPONIBLES),
+        key="filtro_sector_cierre",
+        format_func=lambda x: f"Sector {x}" if x != "Todos" else x
+    )
+
+    if filtro_sector != "Todos":
+        en_curso = en_curso[en_curso["Sector"] == str(filtro_sector)]
 
     if en_curso.empty:
-        st.info("📭 No hay reclamos en curso que coincidan con el filtro.")
+        st.info("📭 No hay reclamos en curso en este momento.")
+        # Limpiar el filtro si no hay reclamos
+        if 'filtro_tecnicos_persistente' in st.session_state:
+            st.session_state.filtro_tecnicos_persistente = []
         return False
 
-    st.caption(f"Mostrando {len(en_curso)} reclamos en curso.")
+    # Filtro por técnicos
+    tecnicos_unicos = sorted(set(
+        tecnico.strip().upper()
+        for t in en_curso["Técnico"]
+        for tecnico in t.split(",")
+        if tecnico.strip()
+    ))
+
+    # Inicializar filtro en session_state si no existe
+    if 'filtro_tecnicos_persistente' not in st.session_state:
+        st.session_state.filtro_tecnicos_persistente = []
+
+    # Filtrar los valores por defecto: solo mantener técnicos que existen actualmente
+    filtro_valido = [t for t in st.session_state.filtro_tecnicos_persistente if t in tecnicos_unicos]
+
+    # Actualizar el session_state con los valores válidos
+    if filtro_valido != st.session_state.filtro_tecnicos_persistente:
+        st.session_state.filtro_tecnicos_persistente = filtro_valido
+
+    # Widget multiselect
+    tecnicos_seleccionados = st.multiselect(
+        "👷 Filtrar por técnico asignado",
+        tecnicos_unicos,
+        key="filtro_tecnicos_cierre",
+        default=st.session_state.filtro_tecnicos_persistente
+    )
+
+    # Feedback visual del filtro
+    if tecnicos_seleccionados:
+        st.info(f"🔍 Filtrado por técnico(s): {', '.join(tecnicos_seleccionados)}")
+
+    if tecnicos_seleccionados:
+        en_curso = en_curso[
+            en_curso["Técnico"].apply(lambda t: any(
+                tecnico.strip().upper() in t.upper()
+                for tecnico in tecnicos_seleccionados
+            ))
+        ]
+
+    st.write("### 📋 Reclamos en curso:")
+    df_mostrar = en_curso[[
+        "Fecha y hora",       # ingreso
+        "Fecha_formateada",   # cierre
+        "Nº Cliente",
+        "Nombre",
+        "Sector",
+        "Tipo de reclamo",
+        "Técnico"
+    ]].copy()
+
+    df_mostrar = df_mostrar.rename(columns={
+        "Fecha y hora": "Ingreso",
+        "Fecha_formateada": "Cierre"
+    })
+
+    st.dataframe(df_mostrar, use_container_width=True, height=400,
+                column_config={
+                    "Ingreso": st.column_config.TextColumn("Ingreso", help="Fecha de ingreso"),
+                    "Cierre": st.column_config.TextColumn("Cierre", help="Fecha de cierre (si está resuelto)"),
+                    "Sector": st.column_config.TextColumn("Sector", help="Número de sector asignado")
+                })
+
+    st.markdown("### ✏️ Acciones por reclamo:")
+
+    cambios = False
+
     for i, row in en_curso.iterrows():
-        with st.container(border=True):
-            col1, col2 = st.columns([3, 1])
+        with st.container():
+            col1, col2, col3 = st.columns([3, 1, 1])
+
             with col1:
-                st.markdown(f"**{row['Nombre']}** (`#{row['Nº Cliente']}`)")
-                st.markdown(f"**{row['Tipo de reclamo']}** - Sector {row.get('Sector', 'N/A')}")
-                st.caption(f"Ingreso: {format_fecha(row['Fecha y hora'])} | Asignado a: {row['Técnico']}")
-            with col2:
+                st.markdown(f"**#{row['Nº Cliente']} - {row['Nombre']}**")
+                st.markdown(f"📅 Ingreso: {format_fecha(row['Fecha y hora'])}")
+                st.markdown(f"📅 Cierre: {row.get('Fecha_formateada', '') or '—'}")
+                st.markdown(f"📍 Sector: {row.get('Sector', 'N/A')}")
+                st.markdown(f"📌 {row['Tipo de reclamo']}")
+                st.markdown(f"👷 {row['Técnico']}")
+
                 cliente_id = str(row["Nº Cliente"]).strip()
                 cliente_info = df_clientes[df_clientes["Nº Cliente"] == cliente_id]
                 precinto_actual = cliente_info["N° de Precinto"].values[0] if not cliente_info.empty else ""
+
                 nuevo_precinto = st.text_input("🔒 Precinto", value=precinto_actual, key=f"precinto_{i}")
 
-            btn_cols = st.columns(2)
-            if btn_cols[0].button("✅ Marcar como Resuelto", key=f"resolver_{row['ID Reclamo']}", use_container_width=True):
-                if _cerrar_reclamo(row, nuevo_precinto, precinto_actual, cliente_info, sheet_reclamos, sheet_clientes):
-                    return True
-            if btn_cols[1].button("↩️ Devolver a Pendiente", key=f"volver_{row['ID Reclamo']}", use_container_width=True):
-                if _volver_a_pendiente(row, sheet_reclamos):
-                    return True
-    return False
+            with col2:
+                if st.button("✅ Resuelto", key=f"resolver_{row['ID Reclamo']}", use_container_width=True):
+                    if _cerrar_reclamo(row, nuevo_precinto, precinto_actual, cliente_info, sheet_reclamos, sheet_clientes):
+                        # Guardar el filtro actual antes del rerun
+                        st.session_state.filtro_tecnicos_persistente = tecnicos_seleccionados
+                        st.session_state.force_refresh = True
+                        st.rerun()
+
+            with col3:
+                if st.button("↩️ Pendiente", key=f"volver_{row['ID Reclamo']}", use_container_width=True):
+                    if _volver_a_pendiente(row, sheet_reclamos):
+                        # Guardar el filtro actual antes del rerun
+                        st.session_state.filtro_tecnicos_persistente = tecnicos_seleccionados
+                        st.session_state.force_refresh = True
+                        st.rerun()
+
+            st.divider()
+
+    return cambios
 
 def _cerrar_reclamo(row, nuevo_precinto, precinto_actual, cliente_info, sheet_reclamos, sheet_clientes):
-    with st.spinner("Cerrando reclamo..."):
-        fila_index = row.name + 2
-        fecha_resolucion = ahora_argentina().strftime('%d/%m/%Y %H:%M')
-        updates = [
-            {"range": f"{_col_letter('Estado')}{fila_index}", "values": [["Resuelto"]]},
-            {"range": f"{_col_letter('Fecha_formateada')}{fila_index}", "values": [[fecha_resolucion]]},
-        ]
-        if nuevo_precinto.strip() and nuevo_precinto != precinto_actual:
-            updates.append({"range": f"{_col_letter('N° de Precinto')}{fila_index}", "values": [[nuevo_precinto.strip()]]})
+    try:
+        with st.spinner("Cerrando reclamo..."):
+            time.sleep(1)
+            fila_index = row.name + 2
 
-        success, error = api_manager.safe_sheet_operation(batch_update_sheet, sheet_reclamos, updates, is_batch=True)
-        if success:
-            if nuevo_precinto.strip() and nuevo_precinto != precinto_actual and not cliente_info.empty:
-                index_cliente_en_clientes = cliente_info.index[0] + 2
-                api_manager.safe_sheet_operation(sheet_clientes.update, f"F{index_cliente_en_clientes}", [[nuevo_precinto.strip()]])
-            st.toast(f"Reclamo de {row['Nombre']} cerrado.")
-            return True
-        else:
-            st.error(f"Error al cerrar: {error}")
+            col_estado           = _col_letter("Estado")
+            col_fecha_formateada = _col_letter("Fecha_formateada")
+            col_precinto         = _col_letter("N° de Precinto")
+
+            fecha_resolucion = ahora_argentina().strftime('%d/%m/%Y %H:%M')
+
+            updates = [
+                {"range": f"{col_estado}{fila_index}", "values": [["Resuelto"]]},
+                {"range": f"{col_fecha_formateada}{fila_index}", "values": [[fecha_resolucion]]},
+            ]
+
+            if nuevo_precinto.strip() and nuevo_precinto != precinto_actual:
+                updates.append({"range": f"{col_precinto}{fila_index}", "values": [[nuevo_precinto.strip()]]})
+
+            success, error = api_manager.safe_sheet_operation(
+                batch_update_sheet,
+                sheet_reclamos,
+                updates,
+                is_batch=True
+            )
+
+            if success:
+                if nuevo_precinto.strip() and nuevo_precinto != precinto_actual and not cliente_info.empty:
+                    index_cliente_en_clientes = cliente_info.index[0] + 2
+                    success_precinto, error_precinto = api_manager.safe_sheet_operation(
+                        sheet_clientes.update,
+                        f"F{index_cliente_en_clientes}",
+                        [[nuevo_precinto.strip()]]
+                    )
+                    if not success_precinto:
+                        st.warning(f"⚠️ Precinto guardado en reclamo pero no en hoja de clientes: {error_precinto}")
+
+                st.success(f"🟢 Reclamo de {row['Nombre']} cerrado correctamente. Fecha cierre: {fecha_resolucion}")
+                return True
+            else:
+                st.error(f"❌ Error al actualizar: {error}")
+                if DEBUG_MODE:
+                    st.write("Detalles del error:", error)
+    except Exception as e:
+        st.error(f"❌ Error inesperado: {str(e)}")
+        if DEBUG_MODE:
+            st.exception(e)
+
     return False
 
 def _volver_a_pendiente(row, sheet_reclamos):
-    with st.spinner("Cambiando estado..."):
-        fila_index = row.name + 2
-        updates = [
-            {"range": f"{_col_letter('Estado')}{fila_index}", "values": [["Pendiente"]]},
-            {"range": f"{_col_letter('Técnico')}{fila_index}", "values": [[""]]},
-            {"range": f"{_col_letter('Fecha_formateada')}{fila_index}", "values": [[""]]},
-        ]
-        success, error = api_manager.safe_sheet_operation(batch_update_sheet, sheet_reclamos, updates, is_batch=True)
-        if success:
-            st.toast(f"Reclamo de {row['Nombre']} devuelto a pendiente.")
-            return True
-        else:
-            st.error(f"Error al actualizar: {error}")
+    try:
+        with st.spinner("Cambiando estado..."):
+            time.sleep(1)
+            fila_index = row.name + 2
+
+            col_estado           = _col_letter("Estado")
+            col_tecnico          = _col_letter("Técnico")
+            col_fecha_formateada = _col_letter("Fecha_formateada")
+
+            updates = [
+                {"range": f"{col_estado}{fila_index}", "values": [["Pendiente"]]},
+                {"range": f"{col_tecnico}{fila_index}", "values": [[""]]},
+                {"range": f"{col_fecha_formateada}{fila_index}", "values": [[""]]},
+            ]
+
+            success, error = api_manager.safe_sheet_operation(
+                batch_update_sheet,
+                sheet_reclamos,
+                updates,
+                is_batch=True
+            )
+
+            if success:
+                st.success(f"🔄 Reclamo de {row['Nombre']} vuelto a PENDIENTE. Se borró la fecha de cierre.")
+                return True
+            else:
+                st.error(f"❌ Error al actualizar: {error}")
+                if DEBUG_MODE:
+                    st.write("Detalles del error:", error)
+    except Exception as e:
+        st.error(f"❌ Error inesperado: {str(e)}")
+        if DEBUG_MODE:
+            st.exception(e)
+
     return False
 
-def _eliminar_reclamos_antiguos(df_antiguos, sheet_reclamos):
-    """Elimina las filas correspondientes a los reclamos antiguos."""
-    if df_antiguos.empty:
-        return False
-
-    # +2 porque el índice de gspread es 1-based y hay una fila de cabecera.
-    indices_a_eliminar = sorted([idx + 2 for idx in df_antiguos.index], reverse=True)
-
-    errores = 0
-    with st.spinner(f"Eliminando {len(indices_a_eliminar)} reclamos..."):
-        for index in indices_a_eliminar:
-            success, error = api_manager.safe_sheet_operation(sheet_reclamos.delete_rows, index)
-            if not success:
-                errores += 1
-                st.warning(f"No se pudo eliminar la fila {index}: {error}")
-
-    if errores == 0:
-        st.success(f"✅ {len(indices_a_eliminar)} reclamos antiguos eliminados correctamente.")
-        return True
-    else:
-        st.error(f"Se encontraron {errores} errores al intentar eliminar los reclamos.")
-        return False
-
 def _mostrar_limpieza_reclamos(df_reclamos, sheet_reclamos):
-    with st.container(border=True):
-        st.markdown("##### Eliminar reclamos resueltos con más de 30 días de antigüedad")
+    st.markdown("---")
+    st.markdown("### 🗑️ Limpieza de reclamos antiguos")
 
-        df_resueltos = df_reclamos[df_reclamos["Estado"] == "Resuelto"].copy()
-        df_resueltos['fecha_cierre_dt'] = pd.to_datetime(df_resueltos['Fecha_formateada'], dayfirst=True, errors='coerce')
-        df_resueltos.dropna(subset=['fecha_cierre_dt'], inplace=True)
+    tz_argentina = pytz.timezone("America/Argentina/Buenos_Aires")
+    df_resueltos = df_reclamos[df_reclamos["Estado"] == "Resuelto"].copy()
+    df_resueltos["Fecha y hora"] = pd.to_datetime(df_resueltos["Fecha y hora"])
 
-        tz_argentina = pytz.timezone("America/Argentina/Buenos_Aires")
-        if df_resueltos['fecha_cierre_dt'].dt.tz is None:
-            df_resueltos['fecha_cierre_dt'] = df_resueltos['fecha_cierre_dt'].dt.tz_localize(tz_argentina)
-        else:
-            df_resueltos['fecha_cierre_dt'] = df_resueltos['fecha_cierre_dt'].dt.tz_convert(tz_argentina)
+    if df_resueltos["Fecha y hora"].dt.tz is None:
+        df_resueltos["Fecha y hora"] = df_resueltos["Fecha y hora"].dt.tz_localize(tz_argentina)
+    else:
+        df_resueltos["Fecha y hora"] = df_resueltos["Fecha y hora"].dt.tz_convert(tz_argentina)
 
-        df_resueltos["Dias_resuelto"] = (datetime.now(tz_argentina) - df_resueltos['fecha_cierre_dt']).dt.days
-        df_antiguos = df_resueltos[df_resueltos["Dias_resuelto"] > 30]
+    df_resueltos["Dias_resuelto"] = (datetime.now(tz_argentina) - df_resueltos["Fecha y hora"]).dt.days
+    df_antiguos = df_resueltos[df_resueltos["Dias_resuelto"] > 10]
 
-        st.metric(label="Reclamos antiguos para eliminar", value=len(df_antiguos))
+    st.markdown(f"📅 **Reclamos resueltos con más de 10 días:** {len(df_antiguos)}")
 
-        if not df_antiguos.empty:
-            if st.button("🗑️ Eliminar reclamos antiguos ahora", use_container_width=True, type="primary"):
-                return _eliminar_reclamos_antiguos(df_antiguos, sheet_reclamos)
+    if len(df_antiguos) > 0:
+        if st.button("🔍 Ver reclamos antiguos", key="ver_antiguos"):
+            st.dataframe(df_antiguos[["Fecha y hora", "Nº Cliente", "Nombre", "Sector", "Tipo de reclamo", "Dias_resuelto"]])
+
+        if st.button("🗑️ Eliminar reclamos antiguos", key="eliminar_antiguos"):
+            with st.spinner("Eliminando reclamos antiguos..."):
+                try:
+                    resultado = _eliminar_reclamos_antiguos(df_antiguos, sheet_reclamos)
+                    return resultado
+                except Exception as e:
+                    st.error(f"❌ Error al eliminar reclamos: {str(e)}")
+                    if DEBUG_MODE:
+                        st.exception(e)
+
     return False

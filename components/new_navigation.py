@@ -16,12 +16,10 @@ MENU_ITEMS = [
 def render_main_navigation():
     """Renderiza la navegación principal horizontal con botones."""
     visible_items = [item for item in MENU_ITEMS if has_permission(item["permiso"])]
-
     if not visible_items:
         return
 
     cols = st.columns(len(visible_items))
-
     for i, item in enumerate(visible_items):
         with cols[i]:
             if st.button(
@@ -32,15 +30,12 @@ def render_main_navigation():
             ):
                 st.session_state.current_page = item["key"]
                 st.rerun()
-
     st.markdown("---")
-
 
 def render_user_info():
     """Renderiza información del usuario logueado (componente para header)."""
     if st.session_state.auth.get("logged_in", False):
         user_info = st.session_state.auth.get('user_info', {})
-
         st.markdown(f"""
         <div style="text-align: right;">
             <div>{user_info.get('nombre', 'Usuario')}</div>
