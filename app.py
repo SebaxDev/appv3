@@ -277,7 +277,7 @@ def init_google_sheets():
     @retry(wait=wait_exponential(multiplier=1, min=4, max=10), stop=stop_after_attempt(3))
     def _connect():
         creds = service_account.Credentials.from_service_account_info(
-            {**st.secrets["gcp_service_account"], "private_key": st.secrets["gcp_service_account"]["private_key"].replace("\\n", "\n")},
+            st.secrets["gcp_service_account"],
             scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         )
         client = gspread.authorize(creds)
@@ -289,7 +289,7 @@ def init_google_sheets():
     try:
         return _connect()
     except Exception as e:
-        st.error(f"Error de conexión: {str(e)}")
+        st.error(f"Error de conexión: {e}")
         st.stop()
 
 loading_placeholder = st.empty()
