@@ -7,11 +7,11 @@ from utils.permissions import has_permission
 
 MENU_ITEMS = [
     {"icon": "🏠", "label": "Inicio", "key": "Inicio", "permiso": "inicio"},
-    {"icon": "📊", "label": "Reclamos cargados", "key": "Reclamos cargados", "permiso": "reclamos_cargados"},
-    {"icon": "👥", "label": "Gestión de clientes", "key": "Gestión de clientes", "permiso": "gestion_clientes"},
-    {"icon": "🖨️", "label": "Imprimir reclamos", "key": "Imprimir reclamos", "permiso": "imprimir_reclamos"},
-    {"icon": "🔧", "label": "Seguimiento técnico", "key": "Seguimiento técnico", "permiso": "seguimiento_tecnico"},
-    {"icon": "✅", "label": "Cierre de Reclamos", "key": "Cierre de Reclamos", "permiso": "cierre_reclamos"}
+    {"icon": "📊", "label": "Reclamos", "key": "Reclamos cargados", "permiso": "reclamos_cargados"},
+    {"icon": "👥", "label": "Clientes", "key": "Gestión de clientes", "permiso": "gestion_clientes"},
+    {"icon": "🖨️", "label": "Impresiones", "key": "Imprimir reclamos", "permiso": "imprimir_reclamos"},
+    {"icon": "🔧", "label": "Planificacion", "key": "Seguimiento técnico", "permiso": "seguimiento_tecnico"},
+    {"icon": "✅", "label": "Cierre", "key": "Cierre de Reclamos", "permiso": "cierre_reclamos"}
 ]
 
 def render_main_navigation():

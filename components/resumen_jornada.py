@@ -23,7 +23,8 @@ def render_resumen_jornada(df_reclamos):
         hoy = datetime.now(argentina_tz).date()
 
         # Filtrar reclamos de hoy
-        df_hoy = df_copy[df_copy["Fecha y hora"].dt.tz_convert(argentina_tz).dt.date == hoy].copy()
+        df_copy.dropna(subset=["Fecha y hora"], inplace=True)
+        df_hoy = df_copy[df_copy["Fecha y hora"].dt.tz_localize(argentina_tz).dt.date == hoy].copy()
 
         # --- Cálculos de Métricas del Día ---
         if df_hoy.empty:
