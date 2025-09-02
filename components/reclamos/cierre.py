@@ -23,20 +23,17 @@ def _col_letter(col_name: str) -> str:
         idx = COLUMNAS_RECLAMOS.index(col_name) + 1
         return _excel_col_letter(idx)
     except (ValueError, IndexError):
-        # Fallback por si la columna no está en la lista principal
-        st.warning(f"Advertencia: La columna '{col_name}' no se encontró en la configuración. La actualización podría fallar.")
+        st.warning(f"Advertencia: La columna '{col_name}' no se encontró en la configuración.")
         return None
 
 def render_cierre_reclamos(df_reclamos, df_clientes, sheet_reclamos, sheet_clientes, user):
     st.header("✅ Cierre y Gestión de Reclamos")
 
-    # Preparación de datos una sola vez
     df_reclamos["ID Reclamo"] = df_reclamos["ID Reclamo"].astype(str).str.strip()
     df_reclamos["Nº Cliente"] = df_reclamos["Nº Cliente"].astype(str).str.strip()
     df_reclamos["Técnico"] = df_reclamos["Técnico"].astype(str).fillna("")
     df_reclamos["Fecha y hora"] = df_reclamos["Fecha y hora"].apply(parse_fecha)
 
-    # --- Layout con Pestañas ---
     tab1, tab2, tab3 = st.tabs(["Cerrar Reclamos en Curso", "Reasignar Técnico", "Limpieza de Reclamos Antiguos"])
 
     with tab1:
@@ -59,13 +56,11 @@ def render_cierre_reclamos(df_reclamos, df_clientes, sheet_reclamos, sheet_clien
 def _mostrar_reasignacion_tecnico(df_reclamos, sheet_reclamos):
     with st.container(border=True):
         cliente_busqueda = st.text_input("🔢 Ingresa el N° de Cliente para buscar y reasignar", key="buscar_cliente_tecnico").strip()
-
         if not cliente_busqueda:
             st.info("Ingresa un número de cliente para comenzar.")
             return False
 
         reclamos_filtrados = df_reclamos[(df_reclamos["Nº Cliente"] == cliente_busqueda) & (df_reclamos["Estado"].isin(["Pendiente", "En curso"]))]
-
         if reclamos_filtrados.empty:
             st.warning("⚠️ No se encontró un reclamo activo para ese cliente.")
             return False
@@ -76,7 +71,6 @@ def _mostrar_reasignacion_tecnico(df_reclamos, sheet_reclamos):
 
         tecnicos_actuales_raw = [t.strip().lower() for t in reclamo["Técnico"].split(",") if t.strip()]
         tecnicos_actuales = [tecnico for tecnico in TECNICOS_DISPONIBLES if tecnico.lower() in tecnicos_actuales_raw]
-
         nuevo_tecnico_multiselect = st.multiselect("👷 Asignar nuevo(s) técnico(s)", options=TECNICOS_DISPONIBLES, default=tecnicos_actuales, key="nuevo_tecnico_input")
 
         if st.button("💾 Guardar Nuevo Técnico", key="guardar_tecnico", use_container_width=True):
@@ -98,8 +92,6 @@ def _mostrar_reasignacion_tecnico(df_reclamos, sheet_reclamos):
 
 def _mostrar_reclamos_en_curso(df_reclamos, df_clientes, sheet_reclamos, sheet_clientes):
     en_curso = df_reclamos[df_reclamos["Estado"] == "En curso"].copy()
-    
-    # --- Filtros ---
     tecnicos_unicos = sorted(set(tecnico.strip().upper() for t in en_curso["Técnico"] for tecnico in t.split(",") if tecnico.strip()))
     tecnicos_seleccionados = st.multiselect("👷 Filtrar por técnico asignado", tecnicos_unicos, key="filtro_tecnicos_cierre")
 
@@ -111,8 +103,6 @@ def _mostrar_reclamos_en_curso(df_reclamos, df_clientes, sheet_reclamos, sheet_c
         return False
 
     st.caption(f"Mostrando {len(en_curso)} reclamos en curso.")
-    
-    # --- Tarjetas de Reclamo ---
     for i, row in en_curso.iterrows():
         with st.container(border=True):
             col1, col2 = st.columns([3, 1])
@@ -120,7 +110,6 @@ def _mostrar_reclamos_en_curso(df_reclamos, df_clientes, sheet_reclamos, sheet_c
                 st.markdown(f"**{row['Nombre']}** (`#{row['Nº Cliente']}`)")
                 st.markdown(f"**{row['Tipo de reclamo']}** - Sector {row.get('Sector', 'N/A')}")
                 st.caption(f"Ingreso: {format_fecha(row['Fecha y hora'])} | Asignado a: {row['Técnico']}")
-
             with col2:
                 cliente_id = str(row["Nº Cliente"]).strip()
                 cliente_info = df_clientes[df_clientes["Nº Cliente"] == cliente_id]
@@ -131,7 +120,6 @@ def _mostrar_reclamos_en_curso(df_reclamos, df_clientes, sheet_reclamos, sheet_c
             if btn_cols[0].button("✅ Marcar como Resuelto", key=f"resolver_{row['ID Reclamo']}", use_container_width=True):
                 if _cerrar_reclamo(row, nuevo_precinto, precinto_actual, cliente_info, sheet_reclamos, sheet_clientes):
                     return True
-
             if btn_cols[1].button("↩️ Devolver a Pendiente", key=f"volver_{row['ID Reclamo']}", use_container_width=True):
                 if _volver_a_pendiente(row, sheet_reclamos):
                     return True
@@ -175,31 +163,49 @@ def _volver_a_pendiente(row, sheet_reclamos):
             st.error(f"Error al actualizar: {error}")
     return False
 
+def _eliminar_reclamos_antiguos(df_antiguos, sheet_reclamos):
+    """Elimina las filas correspondientes a los reclamos antiguos."""
+    if df_antiguos.empty:
+        return False
+
+    # +2 porque el índice de gspread es 1-based y hay una fila de cabecera.
+    indices_a_eliminar = sorted([idx + 2 for idx in df_antiguos.index], reverse=True)
+
+    errores = 0
+    with st.spinner(f"Eliminando {len(indices_a_eliminar)} reclamos..."):
+        for index in indices_a_eliminar:
+            success, error = api_manager.safe_sheet_operation(sheet_reclamos.delete_rows, index)
+            if not success:
+                errores += 1
+                st.warning(f"No se pudo eliminar la fila {index}: {error}")
+
+    if errores == 0:
+        st.success(f"✅ {len(indices_a_eliminar)} reclamos antiguos eliminados correctamente.")
+        return True
+    else:
+        st.error(f"Se encontraron {errores} errores al intentar eliminar los reclamos.")
+        return False
+
 def _mostrar_limpieza_reclamos(df_reclamos, sheet_reclamos):
     with st.container(border=True):
-        st.markdown("##### Eliminar reclamos resueltos con más de 10 días de antigüedad")
-        tz_argentina = pytz.timezone("America/Argentina/Buenos_Aires")
+        st.markdown("##### Eliminar reclamos resueltos con más de 30 días de antigüedad")
+
         df_resueltos = df_reclamos[df_reclamos["Estado"] == "Resuelto"].copy()
+        df_resueltos['fecha_cierre_dt'] = pd.to_datetime(df_resueltos['Fecha_formateada'], dayfirst=True, errors='coerce')
+        df_resueltos.dropna(subset=['fecha_cierre_dt'], inplace=True)
 
-        # Asegurar que la columna de fecha sea datetime
-        df_resueltos["Fecha y hora"] = pd.to_datetime(df_resueltos["Fecha y hora"], errors='coerce')
-        df_resueltos.dropna(subset=["Fecha y hora"], inplace=True)
-
-        # Manejo de zona horaria
-        if df_resueltos["Fecha y hora"].dt.tz is None:
-            df_resueltos["Fecha y hora"] = df_resueltos["Fecha y hora"].dt.tz_localize(tz_argentina)
+        tz_argentina = pytz.timezone("America/Argentina/Buenos_Aires")
+        if df_resueltos['fecha_cierre_dt'].dt.tz is None:
+            df_resueltos['fecha_cierre_dt'] = df_resueltos['fecha_cierre_dt'].dt.tz_localize(tz_argentina)
         else:
-            df_resueltos["Fecha y hora"] = df_resueltos["Fecha y hora"].dt.tz_convert(tz_argentina)
+            df_resueltos['fecha_cierre_dt'] = df_resueltos['fecha_cierre_dt'].dt.tz_convert(tz_argentina)
 
-        df_resueltos["Dias_resuelto"] = (datetime.now(tz_argentina) - df_resueltos["Fecha y hora"]).dt.days
-        df_antiguos = df_resueltos[df_resueltos["Dias_resuelto"] > 10]
+        df_resueltos["Dias_resuelto"] = (datetime.now(tz_argentina) - df_resueltos['fecha_cierre_dt']).dt.days
+        df_antiguos = df_resueltos[df_resueltos["Dias_resuelto"] > 30]
 
         st.metric(label="Reclamos antiguos para eliminar", value=len(df_antiguos))
 
         if not df_antiguos.empty:
-            if st.button("🗑️ Eliminar reclamos antiguos ahora", use_container_width=True):
-                with st.spinner("Eliminando..."):
-                    # Implementar lógica de eliminación
-                    st.warning("La lógica de eliminación aún no está implementada.")
-                return True # Simula cambio para refresh
+            if st.button("🗑️ Eliminar reclamos antiguos ahora", use_container_width=True, type="primary"):
+                return _eliminar_reclamos_antiguos(df_antiguos, sheet_reclamos)
     return False

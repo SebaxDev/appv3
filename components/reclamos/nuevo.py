@@ -256,9 +256,12 @@ def _procesar_envio_formulario(estado, nombre, direccion, telefono, sector, tipo
             ]
 
             # --- Interacción con Google Sheets ---
+            # Se utiliza un manejador de API para encapsular la lógica de reintentos y errores.
             success, error = api_manager.safe_sheet_operation(
                 sheet_reclamos.append_row,
-                fila_reclamo
+                fila_reclamo,
+                body={'values': [fila_reclamo]},
+                is_batch=False # Aunque es una sola fila, es buena práctica ser explícito
             )
 
             if success:
@@ -275,6 +278,15 @@ def _procesar_envio_formulario(estado, nombre, direccion, telefono, sector, tipo
                     direccion, telefono, precinto, df_clientes, sheet_clientes
                 )
                 
+                # Notificación
+                if 'notification_manager' in st.session_state:
+                    st.session_state.notification_manager.add(
+                        notification_type="nuevo_reclamo",
+                        message=f"📝 Nuevo reclamo {id_reclamo} - {tipo_reclamo}",
+                        user_target="all",
+                        claim_id=id_reclamo
+                    )
+
                 st.cache_data.clear()
 
                 # 🔄 Forzar recarga para limpiar el formulario y mostrar reclamo activo
