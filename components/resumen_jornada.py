@@ -19,33 +19,17 @@ def render_resumen_jornada(df_reclamos):
         df_copy = df_reclamos.copy()
         df_copy["Fecha y hora"] = pd.to_datetime(df_copy["Fecha y hora"], errors='coerce')
 
-        argentina_tz = pytz.timezone("America/Argentina/Buenos_Aires")
-
-        # Filtrar reclamos de hoy de forma robusta
-        df_copy.dropna(subset=["Fecha y hora"], inplace=True)
-
-        now_arg = datetime.now(argentina_tz)
-        start_of_day = now_arg.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_of_day = start_of_day + timedelta(days=1)
-
-        # Localiza la columna de fecha a la zona horaria correcta antes de comparar
-        localized_dates = df_copy["Fecha y hora"].dt.tz_localize(argentina_tz, ambiguous='infer')
-
-        df_hoy = df_copy[(localized_dates >= start_of_day) & (localized_dates < end_of_day)].copy()
-
         # --- Cálculos de Métricas ---
-        total_hoy = len(df_hoy)
         pendientes_total = len(df_copy[df_copy["Estado"] == "Pendiente"])
         en_curso_total = len(df_copy[df_copy["Estado"] == "En curso"])
         desconexion_total = len(df_copy[df_copy["Estado"] == "Desconexión"])
 
         # --- Visualización de Métricas ---
-        st.markdown("##### Resumen de Estado")
-        cols = st.columns(4)
-        cols[0].metric("📝 Reclamos de Hoy", total_hoy)
-        cols[1].metric("⏳ Pendientes (Total)", pendientes_total)
-        cols[2].metric("🔧 En Curso (Total)", en_curso_total)
-        cols[3].metric("🔌 Desconexión (Total)", desconexion_total)
+        st.markdown("##### Resumen de Estado General")
+        cols = st.columns(3)
+        cols[0].metric("⏳ Pendientes (Total)", pendientes_total)
+        cols[1].metric("🔧 En Curso (Total)", en_curso_total)
+        cols[2].metric("🔌 Desconexión (Total)", desconexion_total)
 
         st.markdown("---")
 

@@ -20,22 +20,20 @@ def render_gestion_reclamos(df_reclamos, df_clientes, sheet_reclamos, user):
     df_reclamos_copy = df_reclamos.copy()
     df_clientes_copy = df_clientes.copy()
 
-    # Asegurar que la clave de unión ('Nº Cliente') sea del mismo tipo y esté limpia.
     df_reclamos_copy["Nº Cliente"] = df_reclamos_copy["Nº Cliente"].astype(str).str.strip()
     df_clientes_copy["Nº Cliente"] = df_clientes_copy["Nº Cliente"].astype(str).str.strip()
 
     df_reclamos_copy["Fecha y hora"] = pd.to_datetime(df_reclamos_copy["Fecha y hora"], errors='coerce')
     df_reclamos_copy["Fecha_formateada"] = df_reclamos_copy["Fecha y hora"].apply(lambda f: format_fecha(f) if pd.notna(f) else "Sin fecha")
 
-    # Unir los dataframes
-    df_merged = pd.merge(df_reclamos_copy, df_clientes_copy[["Nº Cliente", "Teléfono"]], on="Nº Cliente", how="left")
+    df_merged = pd.merge(df_reclamos_copy, df_clientes_copy, on="Nº Cliente", how="left")
     df_merged.sort_values("Fecha y hora", ascending=False, inplace=True)
 
     # 1. Mini-Dashboard de conteo de reclamos por tipo
     _render_conteo_dashboard(df_merged)
     st.markdown("---")
 
-    # 2. Filtros y tabla de los últimos 20 reclamos
+    # 2. Filtros y tabla de los últimos 100 reclamos
     _mostrar_filtros_y_tabla(df_merged)
     st.markdown("---")
 
@@ -43,15 +41,14 @@ def render_gestion_reclamos(df_reclamos, df_clientes, sheet_reclamos, user):
     _render_buscador_puntual(df_merged, sheet_reclamos)
     st.markdown("---")
 
-    # 4. Lista de desconexiones a pedido (lógica corregida)
-    _render_desconexiones(df_merged, sheet_reclamos)
+    # 4. Lista de desconexiones a pedido
+    _gestionar_desconexiones(df_merged, sheet_reclamos)
 
 def _render_conteo_dashboard(df_reclamos):
-    """Muestra el conteo total de reclamos activos como un mini-dashboard."""
     st.subheader("📈 Conteo de Reclamos Activos por Tipo")
     df_activos = df_reclamos[df_reclamos["Estado"].isin(["Pendiente", "En curso"])]
     if df_activos.empty:
-        st.info("No hay reclamos activos (pendientes o en curso).")
+        st.info("No hay reclamos activos.")
         return
     conteo = df_activos.groupby("Tipo de reclamo").size()
     num_tipos = len(conteo)
@@ -64,8 +61,7 @@ def _render_conteo_dashboard(df_reclamos):
         i += 1
 
 def _mostrar_filtros_y_tabla(df):
-    """Muestra filtros y una tabla con los 20 resultados más recientes."""
-    st.subheader("⏳ Últimos Reclamos (hasta 20 resultados)")
+    st.subheader("⏳ Últimos Reclamos (hasta 100 resultados)")
 
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -80,22 +76,18 @@ def _mostrar_filtros_y_tabla(df):
     if sector != "Todos": df_filtrado = df_filtrado[df_filtrado["Sector"] == str(sector)]
     if tipo != "Todos": df_filtrado = df_filtrado[df_filtrado["Tipo de reclamo"] == tipo]
 
-    df_display = df_filtrado.head(20)
+    df_display = df_filtrado.head(100)
     st.markdown(f"**Mostrando {len(df_display)} de {len(df_filtrado)} reclamos encontrados**")
 
-    # --- Selección de columnas robusta ---
     columnas_deseadas = ["Fecha_formateada", "Nº Cliente", "Nombre", "Sector", "Tipo de reclamo", "Teléfono", "Estado"]
     columnas_existentes = [col for col in columnas_deseadas if col in df_display.columns]
 
     st.dataframe(
         df_display[columnas_existentes].rename(columns={"Fecha_formateada": "Fecha y hora"}),
-        use_container_width=True,
-        hide_index=True,
-        height=400
+        use_container_width=True, hide_index=True, height=400
     )
 
 def _render_buscador_puntual(df_reclamos, sheet_reclamos):
-    """Permite buscar un reclamo por N° de cliente y editarlo."""
     st.subheader("🔍 Búsqueda y Edición por Nº de Cliente")
     n_cliente = st.text_input("Ingrese el número de cliente para buscar su reclamo:", key="n_cliente_busqueda")
     if n_cliente:
@@ -105,12 +97,12 @@ def _render_buscador_puntual(df_reclamos, sheet_reclamos):
         else:
             st.info(f"Se encontraron {len(reclamos_cliente)} reclamo(s) para el cliente {n_cliente}.")
             for _, reclamo in reclamos_cliente.iterrows():
-                with st.expander(f"Reclamo ID: {reclamo['ID Reclamo']} - {reclamo['Tipo de reclamo']} ({reclamo['Estado']})"):
+                with st.expander(f"Reclamo ID: {reclamo['ID Reclamo']}"):
                     _render_edit_form(reclamo, df_reclamos, sheet_reclamos)
 
 def _render_edit_form(reclamo, df_reclamos, sheet_reclamos):
-    """Renderiza el formulario de edición para un reclamo."""
     with st.form(key=f"form_edit_{reclamo['ID Reclamo']}"):
+        # ... (código de formulario sin cambios)
         st.markdown(f"**Editando Reclamo de:** {reclamo['Nombre']}")
         c1, c2 = st.columns(2)
         with c1:
@@ -129,30 +121,51 @@ def _render_edit_form(reclamo, df_reclamos, sheet_reclamos):
         if st.form_submit_button("💾 Guardar Cambios"):
             updates = {"Estado": estado, "Técnico": tecnico, "Tipo de reclamo": tipo_reclamo, "Sector": sector, "Detalles": detalles}
             if _actualizar_fila_reclamo(reclamo['ID Reclamo'], df_reclamos, sheet_reclamos, updates):
-                st.success(f"Reclamo {reclamo['ID Reclamo']} actualizado con éxito.")
+                st.success(f"Reclamo {reclamo['ID Reclamo']} actualizado.")
                 st.rerun()
             else:
                 st.error("No se pudo actualizar el reclamo.")
 
-def _render_desconexiones(df_reclamos, sheet_reclamos):
-    """Muestra la lista de desconexiones a pedido para marcarlas como resueltas."""
-    st.subheader("🔌 Desconexiones a Pedido")
-    df_desconexiones = df_reclamos[(df_reclamos["Tipo de reclamo"] == "Desconexión a Pedido") & (df_reclamos["Estado"] == "Desconexión")]
-    if df_desconexiones.empty:
-        st.info("No hay desconexiones pendientes de resolver.")
-        return
-    for _, row in df_desconexiones.iterrows():
-        col1, col2, col3 = st.columns([2, 2, 1])
-        with col1: st.markdown(f"**{row['Nombre']}** (`{row['Nº Cliente']}`)")
-        with col2: st.caption(f"ID: {row['ID Reclamo']}")
-        with col3:
-            if st.button("Marcar como Resuelto", key=f"resolver_{row['ID Reclamo']}", use_container_width=True):
-                if _actualizar_fila_reclamo(row['ID Reclamo'], df_reclamos, sheet_reclamos, {"Estado": "Resuelto"}):
-                    st.success(f"Desconexión {row['ID Reclamo']} marcada como resuelta.")
-                    st.rerun()
-                else:
-                    st.error("No se pudo actualizar la desconexión.")
-        st.divider()
+
+def _gestionar_desconexiones(df, sheet_reclamos):
+    """Gestiona las desconexiones a pedido (puede producir cambios)"""
+    st.markdown("### 🔌 Gestión de Desconexiones a Pedido")
+    desconexiones = df[(df["Tipo de reclamo"].str.strip().str.lower() == "desconexion a pedido") & (df["Estado"].str.strip().str.lower() == "desconexión")]
+    if desconexiones.empty:
+        st.success("✅ No hay desconexiones pendientes de marcar como resueltas.")
+        return False
+    st.info(f"📄 Hay {len(desconexiones)} desconexiones cargadas. Ir a Impresión para imprimir listado.")
+    cambios = False
+    for i, row in desconexiones.iterrows():
+        with st.container():
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                st.markdown(f"**{row['Nº Cliente']} - {row['Nombre']}**")
+                st.markdown(f"📅 {format_fecha(row['Fecha y hora'])} - Sector {row['Sector']}")
+            with col2:
+                if st.button("✅ Marcar como resuelto", key=f"resuelto_{i}", use_container_width=True):
+                    if _marcar_desconexion_como_resuelta(row, sheet_reclamos):
+                        cambios = True
+            st.divider()
+    if cambios:
+        st.rerun()
+
+def _marcar_desconexion_como_resuelta(row, sheet_reclamos):
+    """Marca una desconexión como resuelta en la hoja de cálculo"""
+    with st.spinner("Actualizando estado..."):
+        try:
+            fila = row.name + 2
+            success, error = api_manager.safe_sheet_operation(sheet_reclamos.update, f"I{fila}", "Resuelto")
+            if success:
+                st.toast(f"✅ Desconexión de {row['Nombre']} marcada como resuelta.")
+                return True
+            else:
+                st.error(f"❌ Error al actualizar: {error}")
+                return False
+        except Exception as e:
+            st.error(f"❌ Error inesperado: {str(e)}")
+            if DEBUG_MODE: st.exception(e)
+            return False
 
 def _actualizar_fila_reclamo(reclamo_id, df_reclamos, sheet_reclamos, updates):
     """Función genérica para actualizar una fila de reclamo en Google Sheets."""
