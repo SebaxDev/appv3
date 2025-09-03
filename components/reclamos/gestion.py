@@ -54,8 +54,17 @@ def _preparar_datos(df_reclamos, df_clientes):
     df["Nº Cliente"] = df["Nº Cliente"].astype(str).str.strip()
     df["ID Reclamo"] = df["ID Reclamo"].astype(str).str.strip()
 
-    # Merge eficiente
-    df = pd.merge(df, df_clientes_norm[["Nº Cliente", "Teléfono"]], on="Nº Cliente", how="left")
+    # Verificar si la columna Teléfono ya existe en df_reclamos
+    if "Teléfono" not in df.columns:
+        # Si no existe, hacer el merge con la columna Teléfono de clientes
+        df = pd.merge(df, df_clientes_norm[["Nº Cliente", "Teléfono"]], on="Nº Cliente", how="left")
+    else:
+        # Si ya existe, verificar si hay valores nulos y completar con datos de clientes
+        df_telefono_clientes = df_clientes_norm[["Nº Cliente", "Teléfono"]].rename(columns={"Teléfono": "Teléfono_cliente"})
+        df = pd.merge(df, df_telefono_clientes, on="Nº Cliente", how="left")
+        # Completar teléfonos nulos con los de la base de clientes
+        df["Teléfono"] = df["Teléfono"].fillna(df["Teléfono_cliente"])
+        df = df.drop(columns=["Teléfono_cliente"])
 
     # Manejo de fechas
     df["Fecha y hora"] = pd.to_datetime(df["Fecha y hora"], errors='coerce')
@@ -65,13 +74,15 @@ def _preparar_datos(df_reclamos, df_clientes):
 
 def _mostrar_contadores_reclamos(df):
     """Muestra contadores de reclamos por tipo, separando pendientes y en curso."""
-    tipos_reclamo = df["Tipo de reclamo"].unique()
-    
     # Filtrar solo reclamos pendientes y en curso
     df_activos = df[df["Estado"].isin(["Pendiente", "En curso"])]
     
+    # Obtener tipos de reclamo que tienen al menos un reclamo activo
+    tipos_con_reclamos = df_activos["Tipo de reclamo"].value_counts()
+    tipos_reclamo = tipos_con_reclamos.index.tolist()
+    
     if len(tipos_reclamo) == 0:
-        st.info("No hay tipos de reclamo para mostrar.")
+        st.info("No hay reclamos pendientes o en curso para mostrar.")
         return
     
     # Crear columnas para los contadores
@@ -128,12 +139,17 @@ def _mostrar_filtros_y_dataframe(df):
     
     # Seleccionar columnas específicas para mostrar
     columnas_mostrar = ["Fecha y hora", "Nº Cliente", "Nombre", "Sector", "Tipo de reclamo", "Teléfono", "Estado"]
-    df_mostrar = df_filtrado[columnas_mostrar].copy()
+    
+    # Verificar que todas las columnas existan en el DataFrame
+    columnas_disponibles = [col for col in columnas_mostrar if col in df_filtrado.columns]
+    
+    df_mostrar = df_filtrado[columnas_disponibles].copy()
     
     # Formatear fecha
-    df_mostrar["Fecha y hora"] = df_mostrar["Fecha y hora"].apply(
-        lambda x: format_fecha(x, "%d/%m/%Y %H:%M") if pd.notna(x) else "N/A"
-    )
+    if "Fecha y hora" in df_mostrar.columns:
+        df_mostrar["Fecha y hora"] = df_mostrar["Fecha y hora"].apply(
+            lambda x: format_fecha(x, "%d/%m/%Y %H:%M") if pd.notna(x) else "N/A"
+        )
     
     # Mostrar dataframe con estilo
     st.dataframe(
