@@ -57,31 +57,57 @@ def render_impresion_reclamos(df_reclamos, df_clientes, user):
                     value=True
                 )
 
-        # Nueva opción para imprimir todos los pendientes
-        mensaje_todos = _generar_pdf_todos_pendientes(df_merged, user if incluir_usuario else None)
-        if mensaje_todos:
-            result['message'] = mensaje_todos
-
-        # Impresión por tipo
-        mensaje_tipo = _generar_pdf_por_tipo(df_merged, solo_pendientes, user if incluir_usuario else None)
-        if mensaje_tipo:
-            result['message'] = mensaje_tipo
+        # === REORGANIZACIÓN EN GRID 2x3 ===
+        st.markdown("### 🖨️ Opciones de Impresión")
         
-        # Impresión manual
-        mensaje_manual = _generar_pdf_manual(df_merged, solo_pendientes, user if incluir_usuario else None)
-        if mensaje_manual:
-            result['message'] = mensaje_manual
-
-        # Impresión Desconexiones
-        mensaje_desconexiones = _generar_pdf_desconexiones(df_merged, user if incluir_usuario else None)
-        if mensaje_desconexiones:
-            result['message'] = mensaje_desconexiones
-
-        # Impresión En Curso por Técnico
-        mensaje_en_curso = _generar_pdf_en_curso_por_tecnico(df_merged, user if incluir_usuario else None)
-        if mensaje_en_curso:
-            result['message'] = mensaje_en_curso
-
+        # Fila 1: Dos opciones
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            mensaje_todos = _generar_pdf_todos_pendientes(df_merged, user if incluir_usuario else None)
+            if mensaje_todos:
+                result['message'] = mensaje_todos
+        
+        with col2:
+            mensaje_tipo = _generar_pdf_por_tipo(df_merged, solo_pendientes, user if incluir_usuario else None)
+            if mensaje_tipo:
+                result['message'] = mensaje_tipo
+        
+        # Fila 2: Dos opciones
+        col3, col4 = st.columns(2)
+        
+        with col3:
+            mensaje_manual = _generar_pdf_manual(df_merged, solo_pendientes, user if incluir_usuario else None)
+            if mensaje_manual:
+                result['message'] = mensaje_manual
+        
+        with col4:
+            mensaje_desconexiones = _generar_pdf_desconexiones(df_merged, user if incluir_usuario else None)
+            if mensaje_desconexiones:
+                result['message'] = mensaje_desconexiones
+        
+        # Fila 3: Dos opciones
+        col5, col6 = st.columns(2)
+        
+        with col5:
+            mensaje_en_curso = _generar_pdf_en_curso_por_tecnico(df_merged, user if incluir_usuario else None)
+            if mensaje_en_curso:
+                result['message'] = mensaje_en_curso
+        
+        with col6:
+            # Nueva opción: Reporte Diario en el grid
+            st.markdown("#### 📄 Reporte Diario")
+            if st.button("🖼️ Generar imagen del día", use_container_width=True):
+                img_buffer = generar_reporte_diario_imagen(df_reclamos)
+                fecha_hoy = ahora_argentina().strftime("%Y-%m-%d")
+                
+                st.download_button(
+                    label="⬇️ Descargar Reporte",
+                    data=img_buffer,
+                    file_name=f"reporte_diario_{fecha_hoy}.png",
+                    mime="image/png",
+                    use_container_width=True
+                )
 
     except Exception as e:
         st.error(f"❌ Error al generar PDF: {str(e)}")
@@ -90,25 +116,6 @@ def render_impresion_reclamos(df_reclamos, df_clientes, user):
             st.exception(e)
     finally:
         st.markdown('</div>', unsafe_allow_html=True)
-
-    # === NUEVA SECCIÓN: Reporte Diario ===
-    st.markdown("### 📄 Generar Reporte Diario (PNG)")
-
-    # Definir columna para el botón (centrado)
-    _, col_img, _ = st.columns([1, 2, 1])
-
-    with col_img:
-        if st.button("🖼️ Generar imagen del día"):
-            # Usar el dataframe que recibió el componente (más confiable y testeable)
-            img_buffer = generar_reporte_diario_imagen(df_reclamos)
-            fecha_hoy = ahora_argentina().strftime("%Y-%m-%d")
-            st.download_button(
-                label="⬇️ Descargar Reporte Diario",
-                data=img_buffer,
-                file_name=f"reporte_diario_{fecha_hoy}.png",
-                mime="image/png"
-            )
-
 
     return result
 
@@ -177,36 +184,36 @@ def _mostrar_reclamos_pendientes(df_merged):
 
 def _generar_pdf_todos_pendientes(df_merged, usuario=None):
     """Genera PDF con todos los reclamos pendientes, ordenados por tipo o sector"""
-    st.markdown("### 📋 Imprimir TODOS los reclamos pendientes")
-
-    # Opciones de ordenamiento
-    orden = st.radio(
-        "Ordenar reclamos por:",
-        ["Tipo de reclamo", "Sector"],
-        horizontal=True,
-        key="orden_todos_pendientes"
-    )
-
+    st.markdown("#### 📋 Todos los pendientes")
+    
     # Filtrar solo pendientes
     df_pendientes = df_merged[
         df_merged["Estado"].astype(str).str.strip().str.lower() == "pendiente"
     ]
 
     if df_pendientes.empty:
-        st.info("✅ No hay reclamos pendientes para imprimir.")
+        st.info("✅ No hay reclamos pendientes.")
         return None
 
+    # Opciones de ordenamiento
+    orden = st.radio(
+        "Ordenar por:",
+        ["Tipo", "Sector"],
+        horizontal=True,
+        key="orden_todos_pendientes"
+    )
+
     # Ordenar según selección
-    if orden == "Tipo de reclamo":
+    if orden == "Tipo":
         df_pendientes = df_pendientes.sort_values("Tipo de reclamo")
         titulo = "TODOS LOS RECLAMOS PENDIENTES (ORDENADOS POR TIPO)"
     else:
         df_pendientes = df_pendientes.sort_values("Sector")
         titulo = "TODOS LOS RECLAMOS PENDIENTES (ORDENADOS POR SECTOR)"
 
-    st.success(f"📋 Se encontraron {len(df_pendientes)} reclamos pendientes.")
+    st.info(f"📋 {len(df_pendientes)} reclamos pendientes")
 
-    if st.button("📄 Generar PDF con TODOS los pendientes", key="pdf_todos_pendientes"):
+    if st.button("📄 Generar PDF", key="pdf_todos_pendientes", use_container_width=True):
         buffer = _crear_pdf_reclamos(
             df_pendientes,
             titulo,
@@ -216,10 +223,11 @@ def _generar_pdf_todos_pendientes(df_merged, usuario=None):
         nombre_archivo = f"todos_reclamos_pendientes_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
 
         st.download_button(
-            label="⬇️ Descargar PDF con todos los pendientes",
+            label="⬇️ Descargar PDF",
             data=buffer,
             file_name=nombre_archivo,
             mime="application/pdf",
+            use_container_width=True,
             help=f"Descargar {len(df_pendientes)} reclamos pendientes"
         )
 
@@ -229,11 +237,11 @@ def _generar_pdf_todos_pendientes(df_merged, usuario=None):
 
 def _generar_pdf_por_tipo(df_merged, solo_pendientes, usuario=None):
     """Genera PDF filtrado por tipos de reclamo"""
-    st.markdown("### 📋 Imprimir reclamos por tipo")
+    st.markdown("#### 📋 Por tipo de reclamo")
 
     tipos_disponibles = sorted(df_merged["Tipo de reclamo"].dropna().unique())
     tipos_seleccionados = st.multiselect(
-        "Seleccioná tipos de reclamo a imprimir",
+        "Seleccionar tipos:",
         tipos_disponibles,
         default=tipos_disponibles[0] if tipos_disponibles else None,
         key="select_tipos_pdf"
@@ -254,12 +262,12 @@ def _generar_pdf_por_tipo(df_merged, solo_pendientes, usuario=None):
     ]
 
     if reclamos_filtrados.empty:
-        st.info("No hay reclamos pendientes para los tipos seleccionados.")
+        st.info("No hay reclamos para los tipos seleccionados.")
         return None
 
-    st.success(f"📋 Se encontraron {len(reclamos_filtrados)} reclamos de los tipos seleccionados.")
+    st.info(f"📋 {len(reclamos_filtrados)} reclamos encontrados")
 
-    if st.button("📄 Generar PDF de reclamos por tipo", key="pdf_tipo"):
+    if st.button("📄 Generar PDF", key="pdf_tipo", use_container_width=True):
         buffer = _crear_pdf_reclamos(
             reclamos_filtrados,
             f"RECLAMOS - {', '.join(tipos_seleccionados)}",
@@ -269,11 +277,12 @@ def _generar_pdf_por_tipo(df_merged, solo_pendientes, usuario=None):
         nombre_archivo = f"reclamos_{'_'.join(t.lower().replace(' ', '_') for t in tipos_seleccionados)}.pdf"
 
         st.download_button(
-            label="⬇️ Descargar PDF filtrado por tipo",
+            label="⬇️ Descargar PDF",
             data=buffer,
             file_name=nombre_archivo,
             mime="application/pdf",
-            help=f"Descargar {len(reclamos_filtrados)} reclamos de tipo {', '.join(tipos_seleccionados)}"
+            use_container_width=True,
+            help=f"Descargar {len(reclamos_filtrados)} reclamos"
         )
 
         return f"PDF generado con {len(reclamos_filtrados)} reclamos de tipo {', '.join(tipos_seleccionados)}"
@@ -282,7 +291,7 @@ def _generar_pdf_por_tipo(df_merged, solo_pendientes, usuario=None):
 
 def _generar_pdf_manual(df_merged, solo_pendientes, usuario=None):
     """Genera PDF con selección manual de reclamos"""
-    st.markdown("### 📋 Selección manual de reclamos")
+    st.markdown("#### 📋 Selección manual")
 
     df_filtrado = df_merged.copy()
     if solo_pendientes:
@@ -292,7 +301,7 @@ def _generar_pdf_manual(df_merged, solo_pendientes, usuario=None):
 
     # Selector mejorado con más información
     selected = st.multiselect(
-        "Seleccioná los reclamos a imprimir:",
+        "Seleccionar reclamos:",
         df_filtrado.index,
         format_func=lambda x: (
             f"{df_filtrado.at[x, 'Nº Cliente']} - "
@@ -304,10 +313,12 @@ def _generar_pdf_manual(df_merged, solo_pendientes, usuario=None):
     )
 
     if not selected:
-        st.info("ℹ️ Seleccioná al menos un reclamo para generar el PDF.")
+        st.info("ℹ️ Seleccionar al menos un reclamo")
         return None
 
-    if st.button("📄 Generar PDF con seleccionados", key="pdf_manual"):
+    st.info(f"📋 {len(selected)} reclamos seleccionados")
+
+    if st.button("📄 Generar PDF", key="pdf_manual", use_container_width=True):
         buffer = _crear_pdf_reclamos(
             df_filtrado.loc[selected],
             f"RECLAMOS SELECCIONADOS",
@@ -315,10 +326,11 @@ def _generar_pdf_manual(df_merged, solo_pendientes, usuario=None):
         )
 
         st.download_button(
-            label="⬇️ Descargar PDF seleccionados",
+            label="⬇️ Descargar PDF",
             data=buffer,
             file_name="reclamos_seleccionados.pdf",
             mime="application/pdf",
+            use_container_width=True,
             help=f"Descargar {len(selected)} reclamos seleccionados"
         )
 
@@ -326,69 +338,9 @@ def _generar_pdf_manual(df_merged, solo_pendientes, usuario=None):
     
     return None
 
-def _crear_pdf_reclamos(df_reclamos, titulo, usuario=None):
-    import io
-    from reportlab.pdfgen import canvas
-    from reportlab.lib.pagesizes import A4
-    from utils.pdf_utils import agregar_pie_pdf
-    from datetime import datetime
-
-    buffer = io.BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A4)
-    width, height = A4
-    y = height - 40
-    hoy = datetime.now().strftime('%d/%m/%Y %H:%M')
-
-    # Encabezado
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(40, y, titulo)
-    y -= 20
-
-    c.setFont("Helvetica", 12)
-    c.drawString(40, y, f"Generado el: {hoy}")
-    if usuario:
-        c.drawString(width - 200, y, f"Por: {usuario.get('nombre', 'Sistema')}")
-    y -= 30
-
-    for _, reclamo in df_reclamos.iterrows():
-        if y < 120:
-            agregar_pie_pdf(c, width, height)
-            c.showPage()
-            y = height - 40
-            c.setFont("Helvetica-Bold", 16)
-            c.drawString(40, y, titulo + " (cont.)")
-            y -= 30
-
-        c.setFont("Helvetica-Bold", 14)
-        c.drawString(40, y, f"{reclamo['Nº Cliente']} - {reclamo['Nombre']}")
-        y -= 15
-
-        c.setFont("Helvetica", 11)
-        fecha_pdf = reclamo['Fecha y hora'].strftime('%d/%m/%Y %H:%M') if not pd.isna(reclamo['Fecha y hora']) else 'Sin fecha'
-        lineas = [
-            f"Fecha: {fecha_pdf}",
-            f"Dirección: {reclamo['Dirección']} - Tel: {reclamo['Teléfono']}",
-            f"Sector: {reclamo['Sector']} - Precinto: {reclamo.get('N° de Precinto') or 'N/A'}",
-            f"Tipo: {reclamo['Tipo de reclamo']}",
-            f"Detalles: {reclamo['Detalles'][:100]}..." if len(reclamo['Detalles']) > 100 else f"Detalles: {reclamo['Detalles']}"
-        ]
-
-        for linea in lineas:
-            c.drawString(40, y, linea)
-            y -= 12
-
-        y -= 5
-        c.line(40, y, width - 40, y)
-        y -= 15
-
-    agregar_pie_pdf(c, width, height)
-    c.save()
-    buffer.seek(0)
-    return buffer
-
 def _generar_pdf_desconexiones(df_merged, usuario=None):
     """Genera un PDF con desconexiones a pedido (estado = desconexión)"""
-    st.markdown("### 🔌 Imprimir Desconexiones a Pedido")
+    st.markdown("#### 🔌 Desconexiones a pedido")
 
     df_desconexiones = df_merged[
         (df_merged["Tipo de reclamo"].str.strip().str.lower() == "desconexion a pedido") &
@@ -396,12 +348,12 @@ def _generar_pdf_desconexiones(df_merged, usuario=None):
     ]
 
     if df_desconexiones.empty:
-        st.info("✅ No hay reclamos de tipo Desconexión a Pedido con estado 'Desconexión'.")
+        st.info("✅ No hay desconexiones pendientes")
         return None
 
-    st.success(f"📋 Se encontraron {len(df_desconexiones)} reclamos para desconectar.")
+    st.info(f"📋 {len(df_desconexiones)} desconexiones encontradas")
 
-    if st.button("📄 Generar PDF de desconexiones", key="pdf_desconexiones"):
+    if st.button("📄 Generar PDF", key="pdf_desconexiones", use_container_width=True):
         buffer = _crear_pdf_reclamos(
             df_desconexiones,
             "LISTADO DE CLIENTES PARA DESCONEXIÓN",
@@ -410,11 +362,12 @@ def _generar_pdf_desconexiones(df_merged, usuario=None):
         nombre_archivo = f"desconexiones_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
 
         st.download_button(
-            label="⬇️ Descargar PDF de desconexiones",
+            label="⬇️ Descargar PDF",
             data=buffer,
             file_name=nombre_archivo,
             mime="application/pdf",
-            help=f"Descargar {len(df_desconexiones)} reclamos de desconexión"
+            use_container_width=True,
+            help=f"Descargar {len(df_desconexiones)} desconexiones"
         )
 
         return f"PDF generado con {len(df_desconexiones)} desconexiones pendientes"
@@ -423,23 +376,25 @@ def _generar_pdf_desconexiones(df_merged, usuario=None):
 
 def _generar_pdf_en_curso_por_tecnico(df_merged, usuario=None):
     """Genera un PDF con reclamos en curso agrupados por técnico"""
-    st.markdown("### 👷 Imprimir reclamos EN CURSO")
+    st.markdown("#### 👷 En curso por técnico")
 
     df_en_curso = df_merged[
         df_merged["Estado"].astype(str).str.strip().str.lower() == "en curso"
     ].copy()
 
     if df_en_curso.empty:
-        st.info("✅ No hay reclamos en curso para imprimir.")
+        st.info("✅ No hay reclamos en curso")
         return None
 
-    df_en_curso["Técnico"] = df_en_curso["Técnico"].fillna("Sin técnico").str.upper()
-    reclamos_por_tecnico = df_en_curso.groupby("Técnico")
+    st.info(f"📋 {len(df_en_curso)} reclamos en curso")
 
-    if st.button("📄 Generar PDF de reclamos en curso por técnico", key="pdf_en_curso_tecnico"):
+    if st.button("📄 Generar PDF", key="pdf_en_curso_tecnico", use_container_width=True):
         from reportlab.pdfgen import canvas
         from reportlab.lib.pagesizes import A4
         import io
+
+        df_en_curso["Técnico"] = df_en_curso["Técnico"].fillna("Sin técnico").str.upper()
+        reclamos_por_tecnico = df_en_curso.groupby("Técnico")
 
         buffer = io.BytesIO()
         c = canvas.Canvas(buffer, pagesize=A4)
@@ -487,10 +442,11 @@ def _generar_pdf_en_curso_por_tecnico(df_merged, usuario=None):
         buffer.seek(0)
 
         st.download_button(
-            label="⬇️ Descargar PDF de reclamos en curso",
+            label="⬇️ Descargar PDF",
             data=buffer,
             file_name=f"reclamos_en_curso_tecnicos_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
             mime="application/pdf",
+            use_container_width=True,
             help="Reclamos agrupados por técnico"
         )
 

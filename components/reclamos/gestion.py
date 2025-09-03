@@ -2,29 +2,42 @@
 
 import streamlit as st
 import pandas as pd
-from utils.date_utils import parse_fecha, format_fecha
+from datetime import datetime
+from utils.date_utils import format_fecha
 from utils.api_manager import api_manager, batch_update_sheet
 from config.settings import SECTORES_DISPONIBLES, DEBUG_MODE, TECNICOS_DISPONIBLES
 
 def render_gestion_reclamos(df_reclamos, df_clientes, sheet_reclamos, user):
     """
-    Muestra la sección de gestión de reclamos con un flujo de edición optimizado.
+    Dashboard de gestión de reclamos con contadores, dataframe compacto y editor.
     """
-    st.subheader("📊 Gestión de Reclamos Cargados")
-
+    st.subheader("📊 Dashboard de Gestión de Reclamos")
+    
     try:
         if df_reclamos.empty:
             st.info("No hay reclamos para mostrar.")
             return
 
-        # Prepara los datos una sola vez
+        # Prepara los datos
         df_preparado = _preparar_datos(df_reclamos, df_clientes)
-
-        # Muestra filtros y obtiene el dataframe filtrado
-        df_filtrado = _mostrar_filtros_y_busqueda(df_preparado)
-
-        # Muestra la lista interactiva de reclamos
-        _mostrar_lista_reclamos_interactiva(df_filtrado, sheet_reclamos, user)
+        
+        # 1. Mostrar contadores por tipo de reclamo
+        _mostrar_contadores_reclamos(df_preparado)
+        
+        # 2. Mostrar dataframe compacto con filtros
+        st.markdown("---")
+        st.subheader("📋 Lista Compacta de Reclamos")
+        df_filtrado = _mostrar_filtros_y_dataframe(df_preparado)
+        
+        # 3. Buscador y editor de reclamos
+        st.markdown("---")
+        st.subheader("🔍 Buscar y Editar Reclamo")
+        _mostrar_buscador_editor(df_preparado, sheet_reclamos, user)
+        
+        # 4. Lista de reclamos con estado "Desconexión"
+        st.markdown("---")
+        st.subheader("🔌 Reclamos con Estado 'Desconexión'")
+        _mostrar_reclamos_desconexion(df_preparado, sheet_reclamos, user)
 
     except Exception as e:
         st.error(f"⚠️ Error en la gestión de reclamos: {str(e)}")
@@ -50,108 +63,183 @@ def _preparar_datos(df_reclamos, df_clientes):
 
     return df
 
-def _mostrar_filtros_y_busqueda(df):
-    """Muestra los filtros y la barra de búsqueda, devolviendo el dataframe filtrado."""
-    st.markdown("#### 🔍 Filtros y Búsqueda")
+def _mostrar_contadores_reclamos(df):
+    """Muestra contadores de reclamos por tipo, separando pendientes y en curso."""
+    tipos_reclamo = df["Tipo de reclamo"].unique()
+    
+    # Filtrar solo reclamos pendientes y en curso
+    df_activos = df[df["Estado"].isin(["Pendiente", "En curso"])]
+    
+    if len(tipos_reclamo) == 0:
+        st.info("No hay tipos de reclamo para mostrar.")
+        return
+    
+    # Crear columnas para los contadores
+    cols = st.columns(min(4, len(tipos_reclamo)))
+    
+    for i, tipo in enumerate(tipos_reclamo):
+        col_idx = i % 4
+        with cols[col_idx]:
+            # Contar reclamos por tipo (solo pendientes y en curso)
+            count = len(df_activos[df_activos["Tipo de reclamo"] == tipo])
+            
+            # Mostrar tarjeta con contador
+            st.markdown(f"""
+            <div class="card" style="text-align: center; padding: 1rem;">
+                <h3 style="margin: 0; color: var(--primary-color);">{count}</h3>
+                <p style="margin: 0; color: var(--text-secondary); font-size: 0.9rem;">{tipo}</p>
+            </div>
+            """, unsafe_allow_html=True)
 
-    # Contenedor para los filtros
-    with st.container():
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            estado = st.selectbox("Estado", ["Todos"] + sorted(df["Estado"].dropna().unique()))
-        with col2:
-            sector = st.selectbox("Sector", ["Todos"] + SECTORES_DISPONIBLES)
-        with col3:
-            tipo_reclamo = st.selectbox("Tipo de reclamo", ["Todos"] + sorted(df["Tipo de reclamo"].dropna().unique()))
-
-        busqueda_texto = st.text_input("Buscar por ID de Reclamo, N° de Cliente o Nombre", placeholder="Escribe para buscar...")
-
-    # Aplicar filtros de selectbox
+def _mostrar_filtros_y_dataframe(df):
+    """Muestra filtros y el dataframe compacto de reclamos."""
+    # Filtros
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        estado = st.selectbox("Filtrar por Estado", 
+                             ["Todos"] + sorted(df["Estado"].dropna().unique()),
+                             key="filtro_estado")
+    
+    with col2:
+        sector = st.selectbox("Filtrar por Sector", 
+                             ["Todos"] + SECTORES_DISPONIBLES,
+                             key="filtro_sector")
+    
+    with col3:
+        tipo_reclamo = st.selectbox("Filtrar por Tipo", 
+                                   ["Todos"] + sorted(df["Tipo de reclamo"].dropna().unique()),
+                                   key="filtro_tipo")
+    
+    # Aplicar filtros
     df_filtrado = df.copy()
+    
     if estado != "Todos":
         df_filtrado = df_filtrado[df_filtrado["Estado"] == estado]
+    
     if sector != "Todos":
         df_filtrado = df_filtrado[df_filtrado["Sector"] == sector]
+    
     if tipo_reclamo != "Todos":
         df_filtrado = df_filtrado[df_filtrado["Tipo de reclamo"] == tipo_reclamo]
-
-    # Aplicar filtro de búsqueda de texto
-    if busqueda_texto:
-        termino = busqueda_texto.lower()
-        df_filtrado = df_filtrado[
-            df_filtrado["ID Reclamo"].str.lower().contains(termino) |
-            df_filtrado["Nº Cliente"].str.lower().contains(termino) |
-            df_filtrado["Nombre"].str.lower().contains(termino)
-        ]
-
-    st.markdown(f"**Mostrando {len(df_filtrado)} de {len(df)} reclamos**")
+    
+    # Limitar a los últimos 100 reclamos
+    df_filtrado = df_filtrado.head(100)
+    
+    # Seleccionar columnas específicas para mostrar
+    columnas_mostrar = ["Fecha y hora", "Nº Cliente", "Nombre", "Sector", "Tipo de reclamo", "Teléfono", "Estado"]
+    df_mostrar = df_filtrado[columnas_mostrar].copy()
+    
+    # Formatear fecha
+    df_mostrar["Fecha y hora"] = df_mostrar["Fecha y hora"].apply(
+        lambda x: format_fecha(x, "%d/%m/%Y %H:%M") if pd.notna(x) else "N/A"
+    )
+    
+    # Mostrar dataframe con estilo
+    st.dataframe(
+        df_mostrar,
+        use_container_width=True,
+        height=400,
+        hide_index=True,
+        column_config={
+            "Fecha y hora": st.column_config.TextColumn("Fecha/Hora", width="medium"),
+            "Nº Cliente": st.column_config.TextColumn("N° Cliente", width="small"),
+            "Nombre": st.column_config.TextColumn("Nombre", width="large"),
+            "Sector": st.column_config.TextColumn("Sector", width="small"),
+            "Tipo de reclamo": st.column_config.TextColumn("Tipo Reclamo", width="medium"),
+            "Teléfono": st.column_config.TextColumn("Teléfono", width="medium"),
+            "Estado": st.column_config.TextColumn("Estado", width="small"),
+        }
+    )
+    
+    st.caption(f"Mostrando {len(df_mostrar)} de {len(df_filtrado)} reclamos filtrados")
+    
     return df_filtrado
 
-def _mostrar_lista_reclamos_interactiva(df, sheet_reclamos, user):
-    """Muestra la lista de reclamos con acciones directas."""
-    if df.empty:
-        st.info("No se encontraron reclamos que coincidan con los filtros.")
-        return
+def _mostrar_buscador_editor(df, sheet_reclamos, user):
+    """Muestra buscador y editor de reclamos individuales."""
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        busqueda = st.text_input("Buscar reclamo por ID, N° de Cliente o Nombre:", 
+                               placeholder="Ingrese término de búsqueda...")
+    
+    with col2:
+        st.write("")  # Espaciado
+        st.write("")  # Espaciado
+        buscar_btn = st.button("🔍 Buscar", use_container_width=True)
+    
+    if buscar_btn and busqueda:
+        termino = busqueda.lower().strip()
+        
+        # Buscar en múltiples campos
+        resultados = df[
+            df["ID Reclamo"].astype(str).str.lower().str.contains(termino) |
+            df["Nº Cliente"].astype(str).str.lower().str.contains(termino) |
+            df["Nombre"].str.lower().str.contains(termino)
+        ]
+        
+        if resultados.empty:
+            st.warning("No se encontraron reclamos que coincidan con la búsqueda.")
+        else:
+            st.success(f"Se encontraron {len(resultados)} reclamos.")
+            
+            # Mostrar selector de reclamo si hay múltiples resultados
+            if len(resultados) > 1:
+                opciones = [f"{row['ID Reclamo']} - {row['Nombre']} ({row['Nº Cliente']})" 
+                           for _, row in resultados.iterrows()]
+                seleccion = st.selectbox("Seleccione el reclamo a editar:", opciones)
+                
+                # Extraer ID del reclamo seleccionado
+                reclamo_id = seleccion.split(" - ")[0]
+                reclamo = resultados[resultados["ID Reclamo"] == reclamo_id].iloc[0]
+            else:
+                reclamo = resultados.iloc[0]
+                reclamo_id = reclamo["ID Reclamo"]
+            
+            # Mostrar editor para el reclamo seleccionado
+            _mostrar_editor_reclamo(reclamo, reclamo_id, sheet_reclamos, user)
 
-    for _, reclamo in df.iterrows():
-        card_id = reclamo["ID Reclamo"]
-
-        with st.container():
-            col1, col2, col3 = st.columns([3, 2, 1])
-
-            with col1:
-                st.markdown(f"**{reclamo['Nombre']}** (`{reclamo['Nº Cliente']}`)")
-                st.caption(f"ID Reclamo: {card_id} | Fecha: {format_fecha(reclamo['Fecha y hora'], '%d/%m/%Y %H:%M')}")
-                st.markdown(f"*{reclamo['Tipo de reclamo']}* - Sector {reclamo['Sector']}")
-
-            with col2:
-                # Cambio de estado rápido
-                estados_posibles = ["Pendiente", "En curso", "Resuelto"]
-                try:
-                    current_index = estados_posibles.index(reclamo["Estado"])
-                except ValueError:
-                    current_index = 0
-
-                nuevo_estado = st.selectbox(
-                    "Cambiar estado",
-                    options=estados_posibles,
-                    index=current_index,
-                    key=f"estado_{card_id}",
-                    label_visibility="collapsed"
-                )
-                if nuevo_estado != reclamo["Estado"]:
-                    _actualizar_reclamo(df, sheet_reclamos, card_id, {"estado": nuevo_estado}, user)
-                    st.rerun()
-
-            with col3:
-                # Botón para abrir el modal de edición
-                if st.button("✏️ Editar", key=f"edit_{card_id}", use_container_width=True):
-                    _mostrar_modal_edicion(df, sheet_reclamos, card_id, user)
-
-            st.divider()
-
-def _mostrar_modal_edicion(df, sheet_reclamos, reclamo_id, user):
-    """Muestra un modal (st.dialog) para editar un reclamo específico."""
-    reclamo = df[df["ID Reclamo"] == reclamo_id].iloc[0]
-
-    with st.dialog("✏️ Editar Reclamo", width="large"):
+def _mostrar_editor_reclamo(reclamo, reclamo_id, sheet_reclamos, user):
+    """Muestra el formulario de edición para un reclamo específico."""
+    with st.expander(f"✏️ Editar Reclamo {reclamo_id}", expanded=True):
         with st.form(key=f"form_edit_{reclamo_id}"):
-            st.markdown(f"**Editando Reclamo ID:** {reclamo_id}")
-
             col1, col2 = st.columns(2)
+            
             with col1:
                 nombre = st.text_input("Nombre", value=reclamo.get("Nombre", ""))
                 direccion = st.text_input("Dirección", value=reclamo.get("Dirección", ""))
                 telefono = st.text_input("Teléfono", value=reclamo.get("Teléfono", ""))
+                sector = st.selectbox("Sector", options=SECTORES_DISPONIBLES, 
+                                    index=SECTORES_DISPONIBLES.index(reclamo["Sector"]) 
+                                    if reclamo["Sector"] in SECTORES_DISPONIBLES else 0)
+            
             with col2:
-                sector = st.selectbox("Sector", options=SECTORES_DISPONIBLES, index=SECTORES_DISPONIBLES.index(reclamo["Sector"]) if reclamo["Sector"] in SECTORES_DISPONIBLES else 0)
-                tipo_reclamo = st.selectbox("Tipo de Reclamo", options=sorted(df["Tipo de reclamo"].unique()), index=sorted(df["Tipo de reclamo"].unique()).tolist().index(reclamo["Tipo de reclamo"]))
-                tecnico = st.selectbox("Técnico Asignado", options=[""] + TECNICOS_DISPONIBLES, index=TECNICOS_DISPONIBLES.index(reclamo["Técnico"]) + 1 if reclamo.get("Técnico") in TECNICOS_DISPONIBLES else 0)
-
-            detalles = st.text_area("Detalles", value=reclamo.get("Detalles", ""), height=150)
-            precinto = st.text_input("N° de Precinto", value=reclamo.get("N° de Precinto", ""))
-
-            if st.form_submit_button("💾 Guardar Cambios", use_container_width=True):
+                tipo_reclamo = st.selectbox("Tipo de Reclamo", 
+                                          options=sorted(df_reclamos["Tipo de reclamo"].unique()), 
+                                          index=sorted(df_reclamos["Tipo de reclamo"].unique()).tolist()
+                                          .index(reclamo["Tipo de reclamo"]) 
+                                          if reclamo["Tipo de reclamo"] in df_reclamos["Tipo de reclamo"].unique() else 0)
+                tecnico = st.selectbox("Técnico Asignado", 
+                                     options=[""] + TECNICOS_DISPONIBLES, 
+                                     index=TECNICOS_DISPONIBLES.index(reclamo["Técnico"]) + 1 
+                                     if reclamo.get("Técnico") in TECNICOS_DISPONIBLES else 0)
+                estado = st.selectbox("Estado", 
+                                    options=["Pendiente", "En curso", "Resuelto", "Desconexión"], 
+                                    index=["Pendiente", "En curso", "Resuelto", "Desconexión"]
+                                    .index(reclamo["Estado"]) 
+                                    if reclamo["Estado"] in ["Pendiente", "En curso", "Resuelto", "Desconexión"] else 0)
+                precinto = st.text_input("N° de Precinto", value=reclamo.get("N° de Precinto", ""))
+            
+            detalles = st.text_area("Detalles", value=reclamo.get("Detalles", ""), height=100)
+            
+            col_btn1, col_btn2 = st.columns(2)
+            with col_btn1:
+                guardar_btn = st.form_submit_button("💾 Guardar Cambios", use_container_width=True)
+            with col_btn2:
+                cancelar_btn = st.form_submit_button("❌ Cancelar", use_container_width=True)
+            
+            if guardar_btn:
                 updates = {
                     "nombre": nombre,
                     "direccion": direccion,
@@ -161,9 +249,44 @@ def _mostrar_modal_edicion(df, sheet_reclamos, reclamo_id, user):
                     "tecnico": tecnico,
                     "detalles": detalles,
                     "precinto": precinto,
+                    "estado": estado,
                 }
-                if _actualizar_reclamo(df, sheet_reclamos, reclamo_id, updates, user, full_update=True):
+                if _actualizar_reclamo(df_reclamos, sheet_reclamos, reclamo_id, updates, user, full_update=True):
+                    st.success("✅ Reclamo actualizado correctamente.")
                     st.rerun()
+
+def _mostrar_reclamos_desconexion(df, sheet_reclamos, user):
+    """Muestra lista de reclamos con estado 'Desconexión' y botón para resolver."""
+    df_desconexion = df[df["Estado"] == "Desconexión"]
+    
+    if df_desconexion.empty:
+        st.info("No hay reclamos con estado 'Desconexión'.")
+        return
+    
+    st.write(f"**Total de reclamos con desconexión:** {len(df_desconexion)}")
+    
+    for _, reclamo in df_desconexion.iterrows():
+        card_id = reclamo["ID Reclamo"]
+        
+        with st.container():
+            col1, col2, col3 = st.columns([3, 2, 1])
+            
+            with col1:
+                st.markdown(f"**{reclamo['Nombre']}** (`{reclamo['Nº Cliente']}`)")
+                st.caption(f"ID Reclamo: {card_id} | Fecha: {format_fecha(reclamo['Fecha y hora'], '%d/%m/%Y %H:%M')}")
+                st.markdown(f"*{reclamo['Tipo de reclamo']}* - Sector {reclamo['Sector']}")
+            
+            with col2:
+                st.markdown(f"**Teléfono:** {reclamo.get('Teléfono', 'N/A')}")
+                st.markdown(f"**Detalles:** {reclamo.get('Detalles', 'Sin detalles')[:50]}...")
+            
+            with col3:
+                if st.button("✅ Resolver", key=f"resolve_{card_id}", use_container_width=True):
+                    if _actualizar_reclamo(df, sheet_reclamos, card_id, {"estado": "Resuelto"}, user):
+                        st.success(f"Reclamo {card_id} marcado como resuelto.")
+                        st.rerun()
+            
+            st.divider()
 
 def _actualizar_reclamo(df, sheet_reclamos, reclamo_id, updates, user, full_update=False):
     """Actualiza un reclamo en la hoja de cálculo."""
