@@ -32,7 +32,7 @@ def render_gestion_reclamos(df_reclamos, df_clientes, sheet_reclamos, user):
         # 3. Buscador y editor de reclamos
         st.markdown("---")
         st.subheader("🔍 Buscar y Editar Reclamo")
-        _mostrar_buscador_editor(df_preparado, sheet_reclamos, user)
+        _mostrar_buscador_editor(df_preparado, sheet_reclamos, user, df_reclamos)
         
         # 4. Lista de reclamos con estado "Desconexión"
         st.markdown("---")
@@ -172,7 +172,7 @@ def _mostrar_filtros_y_dataframe(df):
     
     return df_filtrado
 
-def _mostrar_buscador_editor(df, sheet_reclamos, user):
+def _mostrar_buscador_editor(df, sheet_reclamos, user, df_reclamos_original):
     """Muestra buscador y editor de reclamos individuales."""
     col1, col2 = st.columns([3, 1])
     
@@ -214,9 +214,9 @@ def _mostrar_buscador_editor(df, sheet_reclamos, user):
                 reclamo_id = reclamo["ID Reclamo"]
             
             # Mostrar editor para el reclamo seleccionado
-            _mostrar_editor_reclamo(reclamo, reclamo_id, sheet_reclamos, user)
+            _mostrar_editor_reclamo(reclamo, reclamo_id, sheet_reclamos, user, df_reclamos_original)
 
-def _mostrar_editor_reclamo(reclamo, reclamo_id, sheet_reclamos, user):
+def _mostrar_editor_reclamo(reclamo, reclamo_id, sheet_reclamos, user, df_reclamos):
     """Muestra el formulario de edición para un reclamo específico."""
     with st.expander(f"✏️ Editar Reclamo {reclamo_id}", expanded=True):
         with st.form(key=f"form_edit_{reclamo_id}"):
@@ -249,11 +249,8 @@ def _mostrar_editor_reclamo(reclamo, reclamo_id, sheet_reclamos, user):
             
             detalles = st.text_area("Detalles", value=reclamo.get("Detalles", ""), height=100)
             
-            col_btn1, col_btn2 = st.columns(2)
-            with col_btn1:
-                guardar_btn = st.form_submit_button("💾 Guardar Cambios", use_container_width=True)
-            with col_btn2:
-                cancelar_btn = st.form_submit_button("❌ Cancelar", use_container_width=True)
+            # Botón de submit para el formulario
+            guardar_btn = st.form_submit_button("💾 Guardar Cambios", use_container_width=True)
             
             if guardar_btn:
                 updates = {
