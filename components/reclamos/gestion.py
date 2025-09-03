@@ -173,7 +173,7 @@ def _mostrar_filtros_y_dataframe(df):
     return df_filtrado
 
 def _mostrar_buscador_editor(df, sheet_reclamos, user, df_reclamos_original):
-    """Muestra buscador y editor de reclamos individuales."""
+    """Muestra buscador and editor de reclamos individuales."""
     col1, col2 = st.columns([3, 1])
     
     with col1:
@@ -231,20 +231,33 @@ def _mostrar_editor_reclamo(reclamo, reclamo_id, sheet_reclamos, user, df_reclam
                                     if reclamo["Sector"] in SECTORES_DISPONIBLES else 0)
             
             with col2:
+                # Obtener tipos de reclamo únicos y ordenados
+                tipos_reclamo_unicos = sorted(df_reclamos["Tipo de reclamo"].unique())
+                
                 tipo_reclamo = st.selectbox("Tipo de Reclamo", 
-                                          options=sorted(df_reclamos["Tipo de reclamo"].unique()), 
-                                          index=sorted(df_reclamos["Tipo de reclamo"].unique()).tolist()
-                                          .index(reclamo["Tipo de reclamo"]) 
-                                          if reclamo["Tipo de reclamo"] in df_reclamos["Tipo de reclamo"].unique() else 0)
+                                          options=tipos_reclamo_unicos, 
+                                          index=tipos_reclamo_unicos.index(reclamo["Tipo de reclamo"]) 
+                                          if reclamo["Tipo de reclamo"] in tipos_reclamo_unicos else 0)
+                
+                # Manejar técnicos
+                tecnico_actual = reclamo.get("Técnico", "")
+                index_tecnico = 0
+                if tecnico_actual in TECNICOS_DISPONIBLES:
+                    index_tecnico = TECNICOS_DISPONIBLES.index(tecnico_actual) + 1
+                
                 tecnico = st.selectbox("Técnico Asignado", 
                                      options=[""] + TECNICOS_DISPONIBLES, 
-                                     index=TECNICOS_DISPONIBLES.index(reclamo["Técnico"]) + 1 
-                                     if reclamo.get("Técnico") in TECNICOS_DISPONIBLES else 0)
+                                     index=index_tecnico)
+                
+                # Manejar estado
+                estado_actual = reclamo.get("Estado", "Pendiente")
+                estados_opciones = ["Pendiente", "En curso", "Resuelto", "Desconexión"]
+                index_estado = estados_opciones.index(estado_actual) if estado_actual in estados_opciones else 0
+                
                 estado = st.selectbox("Estado", 
-                                    options=["Pendiente", "En curso", "Resuelto", "Desconexión"], 
-                                    index=["Pendiente", "En curso", "Resuelto", "Desconexión"]
-                                    .index(reclamo["Estado"]) 
-                                    if reclamo["Estado"] in ["Pendiente", "En curso", "Resuelto", "Desconexión"] else 0)
+                                    options=estados_opciones, 
+                                    index=index_estado)
+                
                 precinto = st.text_input("N° de Precinto", value=reclamo.get("N° de Precinto", ""))
             
             detalles = st.text_area("Detalles", value=reclamo.get("Detalles", ""), height=100)
