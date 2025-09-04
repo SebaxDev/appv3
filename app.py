@@ -116,13 +116,13 @@ except Exception:
 
 header_cols = st.columns([4, 3, 1, 1])
 with header_cols[0]:
-    render_user_info()
-with header_cols[1]:
     mcol1, mcol2 = st.columns(2)
     with mcol1:
         st.metric(label="📝 Hoy", value=reclamos_hoy_count)
     with mcol2:
         st.metric(label="⏳ Pendientes", value=pendientes_count)
+with header_cols[1]:
+    render_user_info()
 with header_cols[2]:
     def toggle_dark_mode():
         st.session_state.modo_oscuro = st.session_state.dark_mode_toggle
