@@ -33,11 +33,12 @@ def _parse_tecnicos(cadena: str) -> list:
     return [t.strip().upper() for t in (cadena or "").split(',') if t.strip()]
 
 def _handle_resolver_reclamo(reclamo, sheet_reclamos, sheet_clientes, df_clientes):
-    """Marca un reclamo como 'Resuelto' y actualiza la hoja de cálculo."""
+    """Marca un reclamo como 'Resuelto' y actualiza la hoja de cálculo con anotaciones."""
     try:
         with st.spinner("Resolviendo reclamo..."):
             id_reclamo = reclamo['ID Reclamo']
             nuevo_precinto = st.session_state.get(f"precinto_{id_reclamo}", "").strip()
+            anotaciones = st.session_state.get(f"anotaciones_{id_reclamo}", "").strip()
 
             fila_index = reclamo.name + 2
 
@@ -48,6 +49,7 @@ def _handle_resolver_reclamo(reclamo, sheet_reclamos, sheet_clientes, df_cliente
                 {
                     "Estado": "Resuelto",
                     "Fecha_formateada": fecha_resolucion,
+                    "Anotaciones": anotaciones  # Guardar anotaciones en el reclamo (Columna N)
                 },
             )
 
@@ -59,30 +61,29 @@ def _handle_resolver_reclamo(reclamo, sheet_reclamos, sheet_clientes, df_cliente
             )
 
             if success:
-                if nuevo_precinto:
+                # Actualizar anotaciones en cliente si se proporcionaron (Columna I)
+                if anotaciones:
                     cliente_info = df_clientes[df_clientes["Nº Cliente"] == reclamo["Nº Cliente"]]
                     if not cliente_info.empty:
                         idx_cliente = cliente_info.index[0] + 2
-                        # Actualiza precinto en hoja clientes mediante batch para consistencia
                         updates_cliente = [
                             {
-                                "range": f"R{idx_cliente}C{cliente_info.columns.get_loc('N° de Precinto') + 1}",
-                                "values": [[nuevo_precinto]],
+                                "range": "I" + str(idx_cliente),  # Columna I: Anotaciones
+                                "values": [[anotaciones]],
                             }
                         ]
                         api_manager.safe_sheet_operation(
                             batch_update_sheet, sheet_clientes, updates_cliente, is_batch=True
                         )
                 
-                # Limpiar el campo de precinto del session_state
-                if f"precinto_{id_reclamo}" in st.session_state:
-                    del st.session_state[f"precinto_{id_reclamo}"]
+                # Limpiar campos del session_state
+                for key in [f"precinto_{id_reclamo}", f"anotaciones_{id_reclamo}"]:
+                    if key in st.session_state:
+                        del st.session_state[key]
                 
                 st.toast(f"✅ Reclamo #{reclamo['Nº Cliente']} marcado como Resuelto.", icon="🎉")
                 
-                # Verificar si el filtro actual necesita actualizarse
                 _verificar_y_actualizar_filtro()
-                
                 st.rerun()
             else:
                 st.error(f"Error al resolver el reclamo: {error}")
@@ -280,7 +281,7 @@ def render_cierre_reclamos(df_reclamos, df_clientes, sheet_reclamos, sheet_clien
                 with col1:
                     st.markdown(f"**Dirección:** {reclamo.get('Dirección', 'N/A')}")
                     st.markdown(f"**Técnico(s):** `{reclamo.get('Técnico', 'No asignado')}`")
-                    st.markdown(f"**Detalles:**"); st.info(f"{reclamo.get('Detalles', 'Sin detalles.')}")
+                    # Quitamos la visualización del detalle aquí para simplificar
                 
                 # Campo de precinto con valor por defecto del reclamo
                 precinto_actual = reclamo.get("N° de Precinto", "")
@@ -289,6 +290,16 @@ def render_cierre_reclamos(df_reclamos, df_clientes, sheet_reclamos, sheet_clien
                     value=precinto_actual, 
                     key=f"precinto_{id_reclamo}",
                     help="Deja vacío si no hay precinto o ingresa el nuevo número"
+                )
+
+                # Campo para anotaciones (nuevo) - Columna N en Reclamos
+                anotaciones_actuales = reclamo.get("Anotaciones", "")
+                st.text_area(
+                    "📝 Anotaciones (opcional)", 
+                    value=anotaciones_actuales,
+                    key=f"anotaciones_{id_reclamo}",
+                    help="Información adicional sobre el trabajo realizado o observaciones del cliente",
+                    height=100
                 )
                 
                 with col2:

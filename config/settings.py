@@ -40,15 +40,17 @@ COLUMNAS_NOTIFICACIONES = [
 # --------------------------
 # ESTRUCTURAS DE DATOS
 # --------------------------
+
 COLUMNAS_RECLAMOS = [
     "Fecha y hora", "Nº Cliente", "Sector", "Nombre", 
     "Dirección", "Teléfono", "Tipo de reclamo", "Detalles", 
-    "Estado", "Técnico", "N° de Precinto", "Atendido por", "Fecha_formateada", "ID Reclamo"
+    "Estado", "Técnico", "N° de Precinto", "Atendido por", 
+    "Fecha_formateada", "Anotaciones", "ID Reclamo"
 ]
 
 COLUMNAS_CLIENTES = [
     "Nº Cliente", "Sector", "Nombre", "Dirección", 
-    "Teléfono", "N° de Precinto", "ID Cliente", "Última Modificación"
+    "Teléfono", "N° de Precinto", "ID Cliente", "Última Modificación", "Anotaciones"
 ]
 
 COLUMNAS_USUARIOS = [

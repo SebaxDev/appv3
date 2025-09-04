@@ -205,8 +205,18 @@ def render_nuevo_reclamo(df_reclamos, df_clientes, sheet_reclamos, sheet_cliente
     st.session_state.nuevo_reclamo = estado
 
 # --- FUNCIÓN DE FORMULARIO MEJORADA ---
+
 def _mostrar_formulario_reclamo(estado, df_clientes, sheet_reclamos, sheet_clientes, current_user):
-    """Muestra y procesa el formulario de nuevo reclamo"""
+    """Muestra y procesa el formulario de nuevo reclamo con anotaciones previas"""
+    
+    # Mostrar anotaciones previas si el cliente existe y tiene anotaciones
+    if estado['cliente_existente']:
+        anotaciones_previas = estado['cliente_existente'].get("Anotaciones", "")
+        if anotaciones_previas and anotaciones_previas.strip():
+            # Mejoramos el formato de visualización
+            st.markdown("### 📋 Anotación anterior del cliente")
+            st.info(f"**{anotaciones_previas}**")
+    
     with st.form("reclamo_formulario", clear_on_submit=False):
         col1, col2 = st.columns(2)
 
@@ -322,8 +332,7 @@ def _procesar_envio_formulario(estado, nombre, direccion, telefono, sector, tipo
                 precinto.strip(),               # N° de Precinto
                 atendido_por.upper().strip(),   # Atendido por
                 "",                             # Fecha_formateada (se llena al cerrar)
-                "",                             # Campo vacío
-                "",                             # Campo vacío
+                "",                             # N: Anotaciones (vacío al crear)
                 id_reclamo                      # ID Reclamo
             ]
 
@@ -358,7 +367,7 @@ def _procesar_envio_formulario(estado, nombre, direccion, telefono, sector, tipo
                 st.exception(e)
 
 def _gestionar_cliente(nro_cliente, sector, nombre, direccion, telefono, precinto, df_clientes, sheet_clientes):
-    """Gestiona la creación o actualización del cliente"""
+    """Gestiona la creación o actualización del cliente, preservando anotaciones existentes"""
     cliente_existente = df_clientes[df_clientes["Nº Cliente"] == nro_cliente]
     
     if cliente_existente.empty:
@@ -373,28 +382,44 @@ def _gestionar_cliente(nro_cliente, sector, nombre, direccion, telefono, precint
             telefono.strip(),      # E: Teléfono
             precinto.strip(),      # F: N° de Precinto
             id_cliente,            # G: ID Cliente
-            ultima_mod             # H: Última Modificación
+            ultima_mod,            # H: Última Modificación
+            ""                     # I: Anotaciones (vacío para nuevo cliente)
         ]
         success, _ = api_manager.safe_sheet_operation(sheet_clientes.append_row, fila_cliente)
         if success:
             st.info("ℹ️ Nuevo cliente registrado con ID asignado")
     else:
-        # Actualizar cliente existente
+        # Actualizar cliente existente pero preservar anotaciones
+        anotaciones_existentes = cliente_existente.iloc[0].get("Anotaciones", "")
+        
         updates = []
         idx = cliente_existente.index[0] + 2
         
+        # Mapeo correcto de columnas (A=1, B=2, C=3, D=4, E=5, F=6, G=7, H=8, I=9)
         campos_actualizar = {
-            "B": ("Sector", sector),
-            "C": ("Nombre", nombre.upper()),
-            "D": ("Dirección", direccion.upper()),
-            "E": ("Teléfono", telefono.strip()),
-            "F": ("N° de Precinto", precinto.strip())
+            "B": sector,                    # Columna B: Sector
+            "C": nombre.upper(),            # Columna C: Nombre
+            "D": direccion.upper(),         # Columna D: Dirección
+            "E": telefono.strip(),          # Columna E: Teléfono
+            "F": precinto.strip(),          # Columna F: N° de Precinto
+            "I": anotaciones_existentes     # Columna I: Preservar anotaciones existentes
         }
         
-        for col, (campo, nuevo_valor) in campos_actualizar.items():
-            valor_actual = str(cliente_existente.iloc[0][campo]).strip() if campo in cliente_existente.columns else ""
-            if valor_actual != nuevo_valor:
-                updates.append({"range": f"{col}{idx}", "values": [[nuevo_valor]]})
+        # Actualizar solo los campos que han cambiado
+        if str(cliente_existente.iloc[0].get("Sector", "")).strip() != str(sector).strip():
+            updates.append({"range": f"B{idx}", "values": [[sector]]})
+        
+        if str(cliente_existente.iloc[0].get("Nombre", "")).strip() != nombre.upper().strip():
+            updates.append({"range": f"C{idx}", "values": [[nombre.upper()]]})
+        
+        if str(cliente_existente.iloc[0].get("Dirección", "")).strip() != direccion.upper().strip():
+            updates.append({"range": f"D{idx}", "values": [[direccion.upper()]]})
+        
+        if str(cliente_existente.iloc[0].get("Teléfono", "")).strip() != telefono.strip():
+            updates.append({"range": f"E{idx}", "values": [[telefono.strip()]]})
+        
+        if str(cliente_existente.iloc[0].get("N° de Precinto", "")).strip() != precinto.strip():
+            updates.append({"range": f"F{idx}", "values": [[precinto.strip()]]})
         
         if updates:
             success, _ = api_manager.safe_sheet_operation(
