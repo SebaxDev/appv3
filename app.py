@@ -36,6 +36,7 @@ from components.new_navigation import render_main_navigation, render_user_info
 from utils.styles import get_main_styles_v2
 from utils.data_manager import safe_get_sheet_data
 from utils.permissions import has_permission
+from utils.date_utils import ahora_argentina
 
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
@@ -102,14 +103,31 @@ st.markdown(get_main_styles_v2(dark_mode=st.session_state.modo_oscuro), unsafe_a
 # --- HEADER Y NAVEGACIÓN PRINCIPAL ---
 st.markdown("""<h1 style="text-align: center; margin-bottom: 2rem;">Fusion Reclamos CRM</h1>""", unsafe_allow_html=True)
 
-header_cols = st.columns([4, 1, 1])
+# Métricas compactas para el header (hoy y pendientes)
+try:
+    df_header = df_reclamos.copy()
+    df_header["Fecha y hora"] = pd.to_datetime(df_header["Fecha y hora"], dayfirst=True, errors='coerce')
+    hoy = ahora_argentina().date()
+    reclamos_hoy_count = int((df_header["Fecha y hora"].dt.date == hoy).sum())
+    pendientes_count = int((df_header["Estado"].astype(str).str.strip().str.lower() == "pendiente").sum())
+except Exception:
+    reclamos_hoy_count = 0
+    pendientes_count = 0
+
+header_cols = st.columns([4, 3, 1, 1])
 with header_cols[0]:
     render_user_info()
 with header_cols[1]:
+    mcol1, mcol2 = st.columns(2)
+    with mcol1:
+        st.metric(label="📝 Hoy", value=reclamos_hoy_count)
+    with mcol2:
+        st.metric(label="⏳ Pendientes", value=pendientes_count)
+with header_cols[2]:
     def toggle_dark_mode():
         st.session_state.modo_oscuro = st.session_state.dark_mode_toggle
     st.checkbox("🌙 Modo Oscuro", value=st.session_state.modo_oscuro, key="dark_mode_toggle", on_change=toggle_dark_mode)
-with header_cols[2]:
+with header_cols[3]:
     if st.button("Salir 🚪", use_container_width=True):
         st.session_state.auth['logged_in'] = False
         st.session_state.auth['user_info'] = {}
