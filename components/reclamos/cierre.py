@@ -73,7 +73,16 @@ def _handle_resolver_reclamo(reclamo, sheet_reclamos, sheet_clientes, df_cliente
                         api_manager.safe_sheet_operation(
                             batch_update_sheet, sheet_clientes, updates_cliente, is_batch=True
                         )
+                
+                # Limpiar el campo de precinto del session_state
+                if f"precinto_{id_reclamo}" in st.session_state:
+                    del st.session_state[f"precinto_{id_reclamo}"]
+                
                 st.toast(f"✅ Reclamo #{reclamo['Nº Cliente']} marcado como Resuelto.", icon="🎉")
+                
+                # Verificar si el filtro actual necesita actualizarse
+                _verificar_y_actualizar_filtro()
+                
                 st.rerun()
             else:
                 st.error(f"Error al resolver el reclamo: {error}")
@@ -93,12 +102,29 @@ def _handle_volver_a_pendiente(reclamo, sheet_reclamos):
                 batch_update_sheet, sheet_reclamos, updates, is_batch=True
             )
             if success:
+                # Limpiar el campo de precinto del session_state si existe
+                id_reclamo = reclamo['ID Reclamo']
+                if f"precinto_{id_reclamo}" in st.session_state:
+                    del st.session_state[f"precinto_{id_reclamo}"]
+                
                 st.toast(f"↩️ Reclamo #{reclamo['Nº Cliente']} devuelto a Pendiente.", icon="🔄")
+                
+                # Verificar si el filtro actual necesita actualizarse
+                _verificar_y_actualizar_filtro()
+                
                 st.rerun()
             else:
                 st.error(f"Error al devolver a pendiente: {error}")
     except Exception as e:
         st.error(f"Error inesperado al devolver reclamo: {e}")
+
+def _verificar_y_actualizar_filtro():
+    """Verifica si el filtro actual necesita actualizarse y lo resetea si es necesario."""
+    if 'cierre_filtro_tecnico' in st.session_state:
+        filtro_actual = st.session_state.cierre_filtro_tecnico
+        if filtro_actual != "Todos":
+            # Marcar que se debe verificar el filtro en el próximo render
+            st.session_state.verificar_filtro = True
 
 def _handle_eliminar_reclamos(reclamos_a_eliminar, sheet_reclamos):
     """Ejecuta una solicitud batch para eliminar filas de la hoja de cálculo."""
@@ -178,6 +204,7 @@ def render_cierre_reclamos(df_reclamos, df_clientes, sheet_reclamos, sheet_clien
     """Renderiza la interfaz para el cierre y gestión de reclamos 'En curso'."""
     st.subheader("✅ Gestión y Cierre de Reclamos")
     st.markdown("---")
+    
     try:
         df_en_curso = df_reclamos[df_reclamos["Estado"].str.strip().str.lower() == "en curso"].copy()
         df_en_curso["Fecha y hora"] = pd.to_datetime(df_en_curso["Fecha y hora"], dayfirst=True, errors='coerce')
@@ -188,28 +215,47 @@ def render_cierre_reclamos(df_reclamos, df_clientes, sheet_reclamos, sheet_clien
     # --- Reasignación rápida por N° de Cliente ---
     _render_reasignacion_tecnico(df_reclamos, sheet_reclamos)
 
-    if df_en_curso.empty and 'cierre_filtro_tecnico' in st.session_state and st.session_state.cierre_filtro_tecnico == "Todos":
+    # --- Verificación automática del filtro ---
+    if st.session_state.get('verificar_filtro', False):
+        _verificar_filtro_automaticamente(df_en_curso)
+        st.session_state.verificar_filtro = False
+
+    if df_en_curso.empty and st.session_state.get('cierre_filtro_tecnico', "Todos") == "Todos":
         st.info("👍 ¡Excelente! No hay reclamos 'En curso' en este momento.")
 
     # --- Filtros ---
     st.markdown("#### 🔍 Filtrar Reclamos")
     tecnicos_activos = sorted({t for s in df_en_curso["Técnico"].dropna() for t in _parse_tecnicos(s)})
     opciones_filtro = ["Todos"] + tecnicos_activos
+    
+    # Inicializar filtro si no existe
     if 'cierre_filtro_tecnico' not in st.session_state:
         st.session_state.cierre_filtro_tecnico = "Todos"
-    if st.session_state.cierre_filtro_tecnico not in opciones_filtro:
-        st.toast("Filtro reiniciado: el técnico ya no tiene reclamos.", icon="ℹ️")
+    
+    # Verificar si el técnico del filtro actual aún tiene reclamos
+    filtro_actual = st.session_state.cierre_filtro_tecnico
+    if filtro_actual != "Todos" and filtro_actual not in tecnicos_activos:
+        st.toast(f"ℹ️ El técnico {filtro_actual} ya no tiene reclamos. Filtro reseteado a 'Todos'.", icon="ℹ️")
         st.session_state.cierre_filtro_tecnico = "Todos"
         st.rerun()
+    
     filtro_tecnico_idx = opciones_filtro.index(st.session_state.cierre_filtro_tecnico)
+    
     def on_filter_change():
         st.session_state.cierre_filtro_tecnico = st.session_state.cierre_filtro_selectbox
+    
     st.selectbox(
-        "Filtrar por técnico:", options=opciones_filtro, index=filtro_tecnico_idx,
-        key='cierre_filtro_selectbox', on_change=on_filter_change,
+        "Filtrar por técnico:", 
+        options=opciones_filtro, 
+        index=filtro_tecnico_idx,
+        key='cierre_filtro_selectbox', 
+        on_change=on_filter_change,
         help="Selecciona un técnico para ver solo sus reclamos."
     )
+    
     filtro_tecnico = st.session_state.cierre_filtro_tecnico
+    
+    # Aplicar filtro
     if filtro_tecnico != "Todos":
         df_filtrado = df_en_curso[df_en_curso["Técnico"].apply(lambda s: filtro_tecnico in _parse_tecnicos(s))].copy()
     else:
@@ -221,6 +267,10 @@ def render_cierre_reclamos(df_reclamos, df_clientes, sheet_reclamos, sheet_clien
 
     if df_filtrado.empty and filtro_tecnico != "Todos":
         st.info(f"El técnico {filtro_tecnico} no tiene reclamos 'En curso'.")
+        # Opción para volver a la vista general
+        if st.button("🔄 Ver todos los reclamos", key="ver_todos_reclamos"):
+            st.session_state.cierre_filtro_tecnico = "Todos"
+            st.rerun()
     else:
         df_filtrado = df_filtrado.sort_values(by="Fecha y hora", ascending=False)
         for index, reclamo in df_filtrado.iterrows():
@@ -231,16 +281,44 @@ def render_cierre_reclamos(df_reclamos, df_clientes, sheet_reclamos, sheet_clien
                     st.markdown(f"**Dirección:** {reclamo.get('Dirección', 'N/A')}")
                     st.markdown(f"**Técnico(s):** `{reclamo.get('Técnico', 'No asignado')}`")
                     st.markdown(f"**Detalles:**"); st.info(f"{reclamo.get('Detalles', 'Sin detalles.')}")
-                st.text_input("N° de Precinto (si aplica)", value=reclamo.get("N° de Precinto", ""), key=f"precinto_{id_reclamo}")
+                
+                # Campo de precinto con valor por defecto del reclamo
+                precinto_actual = reclamo.get("N° de Precinto", "")
+                st.text_input(
+                    "N° de Precinto (si aplica)", 
+                    value=precinto_actual, 
+                    key=f"precinto_{id_reclamo}",
+                    help="Deja vacío si no hay precinto o ingresa el nuevo número"
+                )
+                
                 with col2:
-                    st.button("✅ Marcar como Resuelto", key=f"resolver_{id_reclamo}", on_click=_handle_resolver_reclamo,
-                              args=(reclamo, sheet_reclamos, sheet_clientes, df_clientes), use_container_width=True, type="primary")
+                    st.button(
+                        "✅ Marcar como Resuelto", 
+                        key=f"resolver_{id_reclamo}", 
+                        on_click=_handle_resolver_reclamo,
+                        args=(reclamo, sheet_reclamos, sheet_clientes, df_clientes), 
+                        use_container_width=True, 
+                        type="primary"
+                    )
                 with col3:
-                    st.button("↩️ Devolver a Pendiente", key=f"pendiente_{id_reclamo}", on_click=_handle_volver_a_pendiente,
-                              args=(reclamo, sheet_reclamos), use_container_width=True)
+                    st.button(
+                        "↩️ Devolver a Pendiente", 
+                        key=f"pendiente_{id_reclamo}", 
+                        on_click=_handle_volver_a_pendiente,
+                        args=(reclamo, sheet_reclamos), 
+                        use_container_width=True
+                    )
 
     # --- Limpieza de Reclamos Antiguos ---
     _render_limpieza_reclamos(df_reclamos, sheet_reclamos)
+
+def _verificar_filtro_automaticamente(df_en_curso):
+    """Verifica automáticamente si el filtro actual necesita actualizarse."""
+    filtro_actual = st.session_state.get('cierre_filtro_tecnico', "Todos")
+    if filtro_actual != "Todos":
+        tecnicos_activos = {t for s in df_en_curso["Técnico"].dropna() for t in _parse_tecnicos(s)}
+        if filtro_actual not in tecnicos_activos:
+            st.session_state.cierre_filtro_tecnico = "Todos"
 
 def _render_reasignacion_tecnico(df_reclamos, sheet_reclamos):
     """Sección superior para reasignar técnico por N° de Cliente."""
@@ -307,6 +385,11 @@ def _render_reasignacion_tecnico(df_reclamos, sheet_reclamos):
                             user_target="all",
                             claim_id=reclamo["ID Reclamo"],
                         )
+                    
+                    # Limpiar el campo de búsqueda
+                    if "buscar_cliente_tecnico" in st.session_state:
+                        del st.session_state.buscar_cliente_tecnico
+                    
                     st.rerun()
                 else:
                     st.error(f"❌ Error al actualizar: {error}")
