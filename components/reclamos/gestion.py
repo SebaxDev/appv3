@@ -320,14 +320,38 @@ def _actualizar_reclamo(df, sheet_reclamos, reclamo_id, updates, user, full_upda
     try:
         with st.spinner("Actualizando reclamo..."):
             # 1) Ubicar fila por ID (normalizado)
-            df_ids = df["ID Reclamo"].astype(str).str.strip()
             reclamo_id_norm = str(reclamo_id).strip()
-            matches = df_ids[df_ids == reclamo_id_norm]
-            if matches.empty:
-                st.error("❌ No se encontró el reclamo para actualizar.")
-                return False
-            fila_idx = matches.index[0]
-            fila_google = fila_idx + 2
+
+            # Intento A: buscar directamente en la hoja usando encabezados para ubicar la columna de ID
+            fila_google = None
+            try:
+                headers, _ = api_manager.safe_sheet_operation(sheet_reclamos.row_values, 1)
+                if headers and isinstance(headers, list):
+                    # Buscar índice de la columna "ID Reclamo"
+                    col_idx = None
+                    for i, h in enumerate(headers, start=1):
+                        if str(h).strip().lower() == "id reclamo":
+                            col_idx = i
+                            break
+                    if col_idx is not None:
+                        col_vals, _ = api_manager.safe_sheet_operation(sheet_reclamos.col_values, col_idx)
+                        if col_vals and isinstance(col_vals, list):
+                            for row_num, val in enumerate(col_vals, start=1):
+                                if str(val).strip() == reclamo_id_norm:
+                                    fila_google = row_num
+                                    break
+            except Exception:
+                pass
+
+            # Intento B: fallback por DataFrame si no se pudo con la hoja
+            if fila_google is None:
+                df_ids = df["ID Reclamo"].astype(str).str.strip()
+                matches = df_ids[df_ids == reclamo_id_norm]
+                if matches.empty:
+                    st.error("❌ No se encontró el reclamo para actualizar.")
+                    return False
+                fila_idx = matches.index[0]
+                fila_google = fila_idx + 2
 
             # 2) Mapas de columnas
             column_map = {
@@ -386,6 +410,11 @@ def _actualizar_reclamo(df, sheet_reclamos, reclamo_id, updates, user, full_upda
                 pass
             try:
                 st.cache_data.clear()
+            except Exception:
+                pass
+            # Forzar rerun para refrescar vistas
+            try:
+                st.rerun()
             except Exception:
                 pass
             return True
