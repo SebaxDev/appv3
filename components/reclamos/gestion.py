@@ -319,7 +319,17 @@ def _actualizar_reclamo(df, sheet_reclamos, reclamo_id, updates, user, full_upda
     """Actualiza un reclamo en la hoja de cálculo."""
     with st.spinner("Actualizando..."):
         try:
-            fila_idx = df[df["ID Reclamo"] == reclamo_id].index[0]
+            # Normalizar ID para búsqueda robusta
+            df_ids = df["ID Reclamo"].astype(str).str.strip()
+            reclamo_id_norm = str(reclamo_id).strip()
+
+            coincidencias = df_ids[df_ids == reclamo_id_norm]
+            if coincidencias.empty:
+                st.error("❌ No se encontró el reclamo en la base para actualizar.")
+                return False
+            if len(coincidencias) > 1:
+                st.warning("⚠️ Múltiples filas coinciden con el ID. Se actualizará la primera.")
+            fila_idx = coincidencias.index[0]
             fila_google_sheets = fila_idx + 2  # +2 para la cabecera y el índice 1-based
 
             updates_list = []
@@ -332,11 +342,29 @@ def _actualizar_reclamo(df, sheet_reclamos, reclamo_id, updates, user, full_upda
                 "estado": "I"
             }
 
+            # Mapeo de claves a nombres de columnas del DataFrame para comparar cambios
+            df_column_map = {
+                "nombre": "Nombre",
+                "direccion": "Dirección",
+                "telefono": "Teléfono",
+                "sector": "Sector",
+                "tipo_reclamo": "Tipo de reclamo",
+                "tecnico": "Técnico",
+                "detalles": "Detalles",
+                "precinto": "N° de Precinto",
+                "estado": "Estado",
+            }
+
             if full_update:
                 for key, value in updates.items():
                     if key in column_map:
-                        col = column_map[key]
-                        updates_list.append({"range": f"{col}{fila_google_sheets}", "values": [[str(value)]]})
+                        # Comparar y solo actualizar si hay cambios
+                        df_col = df_column_map.get(key)
+                        valor_actual = str(df.loc[fila_idx, df_col]).strip() if df_col in df.columns else ""
+                        valor_nuevo = str(value).strip()
+                        if valor_actual != valor_nuevo:
+                            col = column_map[key]
+                            updates_list.append({"range": f"{col}{fila_google_sheets}", "values": [[valor_nuevo]]})
             elif "estado" in updates:
                 # Actualización rápida solo para el estado
                 col = column_map["estado"]
@@ -372,6 +400,17 @@ def _actualizar_reclamo(df, sheet_reclamos, reclamo_id, updates, user, full_upda
 
             if success:
                 st.toast(f"✅ Reclamo {reclamo_id} actualizado.")
+                # Mostrar feedback de rangos actualizados
+                try:
+                    rangos = ", ".join([u["range"] for u in updates_list])
+                    st.caption(f"Actualizado: {rangos}")
+                except Exception:
+                    pass
+                # Forzar recarga de datos cacheados
+                try:
+                    st.cache_data.clear()
+                except Exception:
+                    pass
                 # Notificación de cambio de estado
                 if "estado" in updates and updates["estado"] != estado_anterior:
                     if 'notification_manager' in st.session_state:
