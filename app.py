@@ -158,4 +158,4 @@ else:
 with st.container():
     render_resumen_jornada(df_reclamos)
 
-st.markdown(f"""<div style="text-align:center; font-size:0.8rem; color: var(--text-muted); padding-top: 2rem;">Desarrollado con 💜 por Sebastián Andrés (v2.6)</div>""", unsafe_allow_html=True)
+st.markdown(f"""<div style="text-align:center; font-size:1rem; color: var(--text-muted); padding-top: 2rem;">Desarrollado con 💜 por Sebastián Andrés (v2.6)</div>""", unsafe_allow_html=True)

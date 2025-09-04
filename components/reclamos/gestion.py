@@ -158,9 +158,9 @@ def _mostrar_filtros_y_dataframe(df):
         height=400,
         hide_index=True,
         column_config={
-            "Fecha y hora": st.column_config.TextColumn("Fecha/Hora", width="medium"),
+            "Fecha y hora": st.column_config.TextColumn("Fecha/Hora", width="small"),
             "Nº Cliente": st.column_config.TextColumn("N° Cliente", width="small"),
-            "Nombre": st.column_config.TextColumn("Nombre", width="large"),
+            "Nombre": st.column_config.TextColumn("Nombre", width="medium"),
             "Sector": st.column_config.TextColumn("Sector", width="small"),
             "Tipo de reclamo": st.column_config.TextColumn("Tipo Reclamo", width="medium"),
             "Teléfono": st.column_config.TextColumn("Teléfono", width="medium"),
