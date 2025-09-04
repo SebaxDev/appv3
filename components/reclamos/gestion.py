@@ -316,33 +316,25 @@ def _mostrar_reclamos_desconexion(df, sheet_reclamos, user):
             st.divider()
 
 def _actualizar_reclamo(df, sheet_reclamos, reclamo_id, updates, user, full_update=False):
-    """Actualiza un reclamo en la hoja de cálculo."""
-    with st.spinner("Actualizando..."):
-        try:
-            # Normalizar ID para búsqueda robusta
+    """Actualiza un reclamo en la hoja: simple, compara, persiste y refresca."""
+    try:
+        with st.spinner("Actualizando reclamo..."):
+            # 1) Ubicar fila por ID (normalizado)
             df_ids = df["ID Reclamo"].astype(str).str.strip()
             reclamo_id_norm = str(reclamo_id).strip()
-
-            coincidencias = df_ids[df_ids == reclamo_id_norm]
-            if coincidencias.empty:
-                st.error("❌ No se encontró el reclamo en la base para actualizar.")
+            matches = df_ids[df_ids == reclamo_id_norm]
+            if matches.empty:
+                st.error("❌ No se encontró el reclamo para actualizar.")
                 return False
-            if len(coincidencias) > 1:
-                st.warning("⚠️ Múltiples filas coinciden con el ID. Se actualizará la primera.")
-            fila_idx = coincidencias.index[0]
-            fila_google_sheets = fila_idx + 2  # +2 para la cabecera y el índice 1-based
+            fila_idx = matches.index[0]
+            fila_google = fila_idx + 2
 
-            updates_list = []
-            estado_anterior = df.loc[fila_idx, "Estado"]
-
-            # Mapeo de claves a columnas de la hoja
+            # 2) Mapas de columnas
             column_map = {
                 "nombre": "D", "direccion": "E", "telefono": "F", "sector": "C",
                 "tipo_reclamo": "G", "tecnico": "J", "detalles": "H", "precinto": "K",
                 "estado": "I"
             }
-
-            # Mapeo de claves a nombres de columnas del DataFrame para comparar cambios
             df_column_map = {
                 "nombre": "Nombre",
                 "direccion": "Dirección",
@@ -355,77 +347,50 @@ def _actualizar_reclamo(df, sheet_reclamos, reclamo_id, updates, user, full_upda
                 "estado": "Estado",
             }
 
-            if full_update:
-                for key, value in updates.items():
-                    if key in column_map:
-                        # Comparar y solo actualizar si hay cambios
-                        df_col = df_column_map.get(key)
-                        valor_actual = str(df.loc[fila_idx, df_col]).strip() if df_col in df.columns else ""
-                        valor_nuevo = str(value).strip()
-                        if valor_actual != valor_nuevo:
-                            col = column_map[key]
-                            updates_list.append({"range": f"{col}{fila_google_sheets}", "values": [[valor_nuevo]]})
-            elif "estado" in updates:
-                # Actualización rápida solo para el estado
-                col = column_map["estado"]
-                updates_list.append({"range": f"{col}{fila_google_sheets}", "values": [[updates["estado"]]]})
+            # 3) Construir lista de updates solo con cambios (teléfono libre, detalles opcional)
+            updates_list = []
+            for key, new_val in updates.items():
+                if key not in column_map:
+                    continue
+                df_col = df_column_map.get(key)
+                current_val = str(df.loc[fila_idx, df_col]).strip() if df_col in df.columns else ""
+                new_val_str = "" if new_val is None else str(new_val).strip()
+                if current_val != new_val_str:
+                    col = column_map[key]
+                    updates_list.append({"range": f"{col}{fila_google}", "values": [[new_val_str]]})
 
             if not updates_list:
-                st.toast("No hay cambios que guardar.")
+                st.info("No hay cambios para guardar.")
                 return False
 
-            # Intento 1: actualización por lote con manejo de errores detallado
-            success, error = dm_batch_update_sheet(sheet_reclamos, updates_list)
-
-            if not success:
-                # Fallback: actualizar celda por celda
+            # 4) Intentar batch; si falla, per-celda
+            ok, err = dm_batch_update_sheet(sheet_reclamos, updates_list)
+            if not ok:
                 errores = []
                 for upd in updates_list:
-                    try:
-                        result, err = api_manager.safe_sheet_operation(
-                            sheet_reclamos.update, upd["range"], upd["values"]
-                        )
-                        if err:
-                            errores.append(f"{upd['range']}: {err}")
-                    except Exception as e:
-                        errores.append(f"{upd['range']}: {str(e)}")
-
+                    _, e = api_manager.safe_sheet_operation(sheet_reclamos.update, upd["range"], upd["values"])
+                    if e:
+                        errores.append(f"{upd['range']}: {e}")
                 if errores:
-                    st.error("❌ Error al actualizar algunas celdas:")
-                    for er in errores:
-                        st.write(f"- {er}")
+                    st.error("❌ Error al actualizar:")
+                    for e in errores:
+                        st.write(f"- {e}")
                     return False
-                else:
-                    success = True
 
-            if success:
-                st.toast(f"✅ Reclamo {reclamo_id} actualizado.")
-                # Mostrar feedback de rangos actualizados
-                try:
-                    rangos = ", ".join([u["range"] for u in updates_list])
-                    st.caption(f"Actualizado: {rangos}")
-                except Exception:
-                    pass
-                # Forzar recarga de datos cacheados
-                try:
-                    st.cache_data.clear()
-                except Exception:
-                    pass
-                # Notificación de cambio de estado
-                if "estado" in updates and updates["estado"] != estado_anterior:
-                    if 'notification_manager' in st.session_state:
-                        st.session_state.notification_manager.add(
-                            notification_type="status_change",
-                            message=f"Reclamo {reclamo_id} cambió: {estado_anterior} ➜ {updates['estado']}",
-                            user_target="all",
-                            claim_id=reclamo_id
-                        )
-                return True
-            else:
-                st.error(f"❌ Error al actualizar: {error}")
-                return False
-        except Exception as e:
-            st.error(f"❌ Error inesperado al actualizar: {e}")
-            if DEBUG_MODE:
-                st.exception(e)
-            return False
+            # 5) Feedback y refresh
+            st.success(f"✅ Reclamo {reclamo_id_norm} actualizado")
+            try:
+                rangos = ", ".join([u["range"] for u in updates_list])
+                st.caption(f"Actualizado: {rangos}")
+            except Exception:
+                pass
+            try:
+                st.cache_data.clear()
+            except Exception:
+                pass
+            return True
+    except Exception as e:
+        st.error(f"❌ Error inesperado al actualizar: {e}")
+        if DEBUG_MODE:
+            st.exception(e)
+        return False
