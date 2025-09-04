@@ -82,16 +82,18 @@ def _validar_campos_obligatorios(nombre, direccion, sector, tipo_reclamo, atendi
     return errores
 
 def _reset_formulario():
-    """Resetea el estado del formulario manteniendo el número de cliente"""
+    """Resetea completamente el estado del formulario"""
     if 'nuevo_reclamo' in st.session_state:
-        nro_cliente = st.session_state.nuevo_reclamo.get('nro_cliente', '')
         st.session_state.nuevo_reclamo = {
-            'nro_cliente': nro_cliente,
+            'nro_cliente': '',
             'cliente_existente': None,
             'formulario_bloqueado': False,
             'reclamo_guardado': False,
             'cliente_nuevo': False
         }
+    # Limpiar también el input del número de cliente
+    if 'nro_cliente_input' in st.session_state:
+        st.session_state.nro_cliente_input = ''
 
 # --- FUNCIÓN PRINCIPAL OPTIMIZADA ---
 def render_nuevo_reclamo(df_reclamos, df_clientes, sheet_reclamos, sheet_clientes, current_user=None):
@@ -162,6 +164,23 @@ def render_nuevo_reclamo(df_reclamos, df_clientes, sheet_reclamos, sheet_cliente
 
     if estado['reclamo_guardado']:
         st.success("✅ Reclamo registrado correctamente.")
+        
+        # Verificar si el cliente tiene reclamos activos después de guardar
+        df_clientes_norm, df_reclamos_norm = _normalizar_datos(
+            df_clientes, df_reclamos, estado['nro_cliente']
+        )
+        reclamos_activos = _verificar_reclamos_activos(estado['nro_cliente'], df_reclamos_norm)
+        
+        if not reclamos_activos.empty:
+            st.warning("⚠️ Este cliente ya tiene un reclamo activo. No es posible crear otro hasta que se resuelva o cambie de número de cliente.")
+            
+            # Mostrar reclamos activos
+            for _, reclamo in reclamos_activos.iterrows():
+                with st.expander(f"🔍 Reclamo activo - {format_fecha(reclamo['Fecha y hora'], '%d/%m/%Y %H:%M')}"):
+                    st.markdown(f"**👤 Cliente:** {reclamo.get('Nombre', 'N/A')}")
+                    st.markdown(f"**📌 Tipo:** {reclamo.get('Tipo de reclamo', 'N/A')}")
+                    st.markdown(f"**📝 Detalles:** {reclamo.get('Detalles', 'N/A')[:200]}...")
+                    st.markdown(f"**⚙️ Estado:** {reclamo.get('Estado', 'Sin estado')}")
         if st.button("📝 Crear nuevo reclamo", type="primary"):
             _reset_formulario()
             st.rerun()
