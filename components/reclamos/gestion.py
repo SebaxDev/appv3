@@ -352,6 +352,10 @@ def _actualizar_reclamo(df, sheet_reclamos, reclamo_id, updates, user, full_upda
                     return False
                 fila_idx = matches.index[0]
                 fila_google = fila_idx + 2
+            else:
+                # Si encontramos por hoja, derivamos el índice del DF a partir de la fila de Google
+                # Recordar: fila_google incluye encabezado en la fila 1
+                fila_idx = max(0, fila_google - 2)
 
             # 2) Mapas de columnas
             column_map = {
