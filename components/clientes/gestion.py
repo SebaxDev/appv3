@@ -208,18 +208,16 @@ def _mostrar_edicion_cliente(df_clientes, df_reclamos, sheet_clientes):
         
         if not df_cambios.empty:
             st.table(df_cambios)
-            
-            # Confirmación final
-            if st.button("✅ Confirmar cambios", key=f"confirmar_{cliente_seleccionado}"):
-                cambios = _actualizar_cliente(
-                    df_clientes[df_clientes["Nº Cliente"].astype(str) == str(cliente_seleccionado)],
-                    sheet_clientes,
-                    nuevo_sector,
-                    nuevo_nombre.strip(),
-                    nueva_direccion.strip(),
-                    nuevo_telefono.strip(),
-                    nuevo_precinto.strip()
-                )
+            # Guardar inmediatamente al enviar el formulario
+            cambios = _actualizar_cliente(
+                df_clientes[df_clientes["Nº Cliente"].astype(str) == str(cliente_seleccionado)],
+                sheet_clientes,
+                nuevo_sector,
+                nuevo_nombre.strip(),
+                nueva_direccion.strip(),
+                nuevo_telefono.strip(),
+                nuevo_precinto.strip()
+            )
         else:
             st.info("ℹ️ No se detectaron cambios")
             return cambios
@@ -332,9 +330,30 @@ def _actualizar_cliente(cliente_row, sheet_clientes, nuevo_sector, nuevo_nombre,
             # Ejecutar actualización por lotes con manejo de errores
             success, error = dm_batch_update_sheet(sheet_clientes, updates)
 
+            if not success:
+                # Fallback: intentar actualización individual celda por celda
+                errores = []
+                for upd in updates:
+                    try:
+                        result, err = api_manager.safe_sheet_operation(
+                            sheet_clientes.update, upd["range"], upd["values"]
+                        )
+                        if err:
+                            errores.append(f"{upd['range']}: {err}")
+                    except Exception as e:
+                        errores.append(f"{upd['range']}: {str(e)}")
+
+                if errores:
+                    st.error("❌ Error al actualizar algunas celdas:")
+                    for er in errores:
+                        st.write(f"- {er}")
+                    return False
+                else:
+                    success = True
+
             if success:
                 st.success("✅ Cliente actualizado correctamente.")
-
+                
                 if 'notification_manager' in st.session_state:
                     num_cliente = str(cliente_actual['Nº Cliente'])
                     nombre_cliente = str(nuevo_nombre).upper()
@@ -345,9 +364,6 @@ def _actualizar_cliente(cliente_row, sheet_clientes, nuevo_sector, nuevo_nombre,
                         user_target="all"
                     )
                 return True
-            else:
-                st.error(f"❌ Error al actualizar: {error}")
-                return False
 
         except ValueError:
             st.error("❌ Error: Índice del cliente no es válido")

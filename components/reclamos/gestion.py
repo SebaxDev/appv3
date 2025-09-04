@@ -4,7 +4,8 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 from utils.date_utils import format_fecha
-from utils.api_manager import api_manager, batch_update_sheet
+from utils.api_manager import api_manager
+from utils.data_manager import batch_update_sheet as dm_batch_update_sheet
 from config.settings import SECTORES_DISPONIBLES, DEBUG_MODE, TECNICOS_DISPONIBLES
 
 def render_gestion_reclamos(df_reclamos, df_clientes, sheet_reclamos, user):
@@ -225,7 +226,7 @@ def _mostrar_editor_reclamo(reclamo, reclamo_id, sheet_reclamos, user, df_reclam
             with col1:
                 nombre = st.text_input("Nombre", value=reclamo.get("Nombre", ""))
                 direccion = st.text_input("Dirección", value=reclamo.get("Dirección", ""))
-                telefono = st.text_input("Teléfono", value=reclamo.get("Teléfono", ""))
+                telefono = st.text_input("Teléfono", value=reclamo.get("Teléfono", ""), help="Opcional - formato libre")
                 sector = st.selectbox("Sector", options=SECTORES_DISPONIBLES, 
                                     index=SECTORES_DISPONIBLES.index(reclamo["Sector"]) 
                                     if reclamo["Sector"] in SECTORES_DISPONIBLES else 0)
@@ -260,7 +261,7 @@ def _mostrar_editor_reclamo(reclamo, reclamo_id, sheet_reclamos, user, df_reclam
                 
                 precinto = st.text_input("N° de Precinto", value=reclamo.get("N° de Precinto", ""))
             
-            detalles = st.text_area("Detalles", value=reclamo.get("Detalles", ""), height=100)
+            detalles = st.text_area("Detalles", value=reclamo.get("Detalles", ""), height=100, help="Opcional")
             
             # Botón de submit para el formulario
             guardar_btn = st.form_submit_button("💾 Guardar Cambios", use_container_width=True)
@@ -345,9 +346,29 @@ def _actualizar_reclamo(df, sheet_reclamos, reclamo_id, updates, user, full_upda
                 st.toast("No hay cambios que guardar.")
                 return False
 
-            success, error = api_manager.safe_sheet_operation(
-                batch_update_sheet, sheet_reclamos, updates_list, is_batch=True
-            )
+            # Intento 1: actualización por lote con manejo de errores detallado
+            success, error = dm_batch_update_sheet(sheet_reclamos, updates_list)
+
+            if not success:
+                # Fallback: actualizar celda por celda
+                errores = []
+                for upd in updates_list:
+                    try:
+                        result, err = api_manager.safe_sheet_operation(
+                            sheet_reclamos.update, upd["range"], upd["values"]
+                        )
+                        if err:
+                            errores.append(f"{upd['range']}: {err}")
+                    except Exception as e:
+                        errores.append(f"{upd['range']}: {str(e)}")
+
+                if errores:
+                    st.error("❌ Error al actualizar algunas celdas:")
+                    for er in errores:
+                        st.write(f"- {er}")
+                    return False
+                else:
+                    success = True
 
             if success:
                 st.toast(f"✅ Reclamo {reclamo_id} actualizado.")
