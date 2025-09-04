@@ -307,7 +307,7 @@ def _mostrar_reclamos_desconexion(df, sheet_reclamos, user):
                 st.markdown(f"**Detalles:** {reclamo.get('Detalles', 'Sin detalles')[:50]}...")
             
             with col3:
-                if st.button("✅ Resolver", key=f"resolve_{card_id}", use_container_width=True):
+                if st.button("✅ Desc de Caja", key=f"resolve_{card_id}", use_container_width=True):
                     if _actualizar_reclamo(df, sheet_reclamos, card_id, {"estado": "Resuelto"}, user):
                         st.success(f"Reclamo {card_id} marcado como resuelto.")
                         st.rerun()
