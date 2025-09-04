@@ -2,7 +2,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from utils.date_utils import ahora_argentina, format_fecha, parse_fecha
+from utils.date_utils import ahora_argentina, format_fecha
 from utils.api_manager import api_manager
 from utils.data_manager import batch_update_sheet
 from config.settings import (
@@ -48,7 +48,6 @@ def _verificar_reclamos_activos(nro_cliente, df_reclamos):
     
     # Convertir estados a minúsculas para comparación case-insensitive
     estados_activos = ["pendiente", "en curso"]
-    # Un reclamo se considera activo si está pendiente/en curso O si es una desconexión, que es un estado final pero bloqueante.
     reclamos_activos = reclamos_cliente[
         reclamos_cliente["Estado"].str.strip().str.lower().isin(estados_activos) |
         (reclamos_cliente["Tipo de reclamo"].str.strip().str.lower() == "desconexion a pedido")
@@ -61,6 +60,39 @@ def generar_id_unico():
     import uuid
     return str(uuid.uuid4())[:8].upper()
 
+def _validar_campos_obligatorios(nombre, direccion, sector, tipo_reclamo, atendido_por):
+    """Valida campos obligatorios y devuelve errores"""
+    errores = []
+    
+    if not nombre.strip():
+        errores.append("Nombre")
+    
+    if not direccion.strip():
+        errores.append("Dirección")
+    
+    if not str(sector).strip():
+        errores.append("Sector")
+    
+    if not tipo_reclamo.strip():
+        errores.append("Tipo de reclamo")
+    
+    if not atendido_por.strip():
+        errores.append("Atendido por")
+    
+    return errores
+
+def _reset_formulario():
+    """Resetea el estado del formulario manteniendo el número de cliente"""
+    if 'nuevo_reclamo' in st.session_state:
+        nro_cliente = st.session_state.nuevo_reclamo.get('nro_cliente', '')
+        st.session_state.nuevo_reclamo = {
+            'nro_cliente': nro_cliente,
+            'cliente_existente': None,
+            'formulario_bloqueado': False,
+            'reclamo_guardado': False,
+            'cliente_nuevo': False
+        }
+
 # --- FUNCIÓN PRINCIPAL OPTIMIZADA ---
 def render_nuevo_reclamo(df_reclamos, df_clientes, sheet_reclamos, sheet_clientes, current_user=None):
     """
@@ -68,18 +100,33 @@ def render_nuevo_reclamo(df_reclamos, df_clientes, sheet_reclamos, sheet_cliente
     """
     st.subheader("📝 Cargar nuevo reclamo")
 
-    estado = {
-        'nro_cliente': '',
-        'cliente_existente': None,
-        'formulario_bloqueado': False,
-        'reclamo_guardado': False,
-        'cliente_nuevo': False
-    }
+    # Inicializar estado en session_state
+    if 'nuevo_reclamo' not in st.session_state:
+        st.session_state.nuevo_reclamo = {
+            'nro_cliente': '',
+            'cliente_existente': None,
+            'formulario_bloqueado': False,
+            'reclamo_guardado': False,
+            'cliente_nuevo': False
+        }
 
-    estado['nro_cliente'] = st.text_input(
+    estado = st.session_state.nuevo_reclamo
+
+    # Input de número de cliente
+    nro_cliente_actual = st.text_input(
         "🔢 N° de Cliente", 
-        placeholder="Ingresa el número de cliente"
+        value=estado['nro_cliente'],
+        placeholder="Ingresa el número de cliente",
+        key="nro_cliente_input"
     ).strip()
+
+    # Actualizar estado si cambió el número de cliente
+    if nro_cliente_actual != estado['nro_cliente']:
+        estado['nro_cliente'] = nro_cliente_actual
+        estado['cliente_existente'] = None
+        estado['cliente_nuevo'] = False
+        estado['formulario_bloqueado'] = False
+        estado['reclamo_guardado'] = False
 
     if estado['nro_cliente']:
         # Normalizar datos solo cuando sea necesario
@@ -115,10 +162,14 @@ def render_nuevo_reclamo(df_reclamos, df_clientes, sheet_reclamos, sheet_cliente
 
     if estado['reclamo_guardado']:
         st.success("✅ Reclamo registrado correctamente.")
+        if st.button("📝 Crear nuevo reclamo", type="primary"):
+            _reset_formulario()
+            st.rerun()
     elif not estado['formulario_bloqueado']:
-        estado = _mostrar_formulario_reclamo(estado, df_clientes, sheet_reclamos, sheet_clientes, current_user)
+        _mostrar_formulario_reclamo(estado, df_clientes, sheet_reclamos, sheet_clientes, current_user)
 
-    return estado
+    # Actualizar session_state
+    st.session_state.nuevo_reclamo = estado
 
 # --- FUNCIÓN DE FORMULARIO MEJORADA ---
 def _mostrar_formulario_reclamo(estado, df_clientes, sheet_reclamos, sheet_clientes, current_user):
@@ -187,13 +238,11 @@ def _mostrar_formulario_reclamo(estado, df_clientes, sheet_reclamos, sheet_clien
         enviado = st.form_submit_button("✅ Guardar Reclamo", use_container_width=True)
 
     if enviado:
-        estado = _procesar_envio_formulario(
+        _procesar_envio_formulario(
             estado, nombre, direccion, telefono, sector, 
             tipo_reclamo, detalles, precinto, atendido_por,
             df_clientes, sheet_reclamos, sheet_clientes
         )
-    
-    return estado
 
 # --- FUNCIÓN DE PROCESAMIENTO OPTIMIZADA ---
 def _procesar_envio_formulario(estado, nombre, direccion, telefono, sector, tipo_reclamo, 
@@ -201,32 +250,23 @@ def _procesar_envio_formulario(estado, nombre, direccion, telefono, sector, tipo
     """Procesa el envío del formulario de manera optimizada"""
     
     # Validar campos obligatorios
-    campos_obligatorios = {
-        "Nombre": nombre.strip(),
-        "Dirección": direccion.strip(),
-        "Sector": str(sector).strip(),
-        "Tipo de reclamo": tipo_reclamo.strip(),
-        "Atendido por": atendido_por.strip()
-    }
-    
-    campos_vacios = [campo for campo, valor in campos_obligatorios.items() if not valor]
+    campos_vacios = _validar_campos_obligatorios(nombre, direccion, sector, tipo_reclamo, atendido_por)
     
     if campos_vacios:
         st.error(f"⚠️ Campos obligatorios vacíos: {', '.join(campos_vacios)}")
-        return estado
+        return
 
     # Validar y normalizar sector
     sector_normalizado, error_sector = _validar_y_normalizar_sector(sector)
     if error_sector:
         st.error(error_sector)
-        return estado
+        return
 
     with st.spinner("Guardando reclamo..."):
         try:
             # --- Preparación de Datos del Reclamo ---
             fecha_hora = ahora_argentina()
             # Condición especial para el tipo de reclamo "Desconexion a Pedido"
-            # Se usa .strip() y .lower() para una comparación robusta.
             if tipo_reclamo.strip().lower() == "desconexion a pedido":
                 estado_reclamo = "Desconexión"
             else:
@@ -234,8 +274,7 @@ def _procesar_envio_formulario(estado, nombre, direccion, telefono, sector, tipo
 
             id_reclamo = generar_id_unico()
 
-            # Construcción de la fila de datos para la hoja de cálculo.
-            # Esto asegura que los datos se insertan en el orden correcto definido por las columnas.
+            # Construcción de la fila de datos para la hoja de cálculo
             fila_reclamo = [
                 format_fecha(fecha_hora),       # Fecha y hora
                 estado['nro_cliente'],          # Nº Cliente
@@ -250,8 +289,8 @@ def _procesar_envio_formulario(estado, nombre, direccion, telefono, sector, tipo
                 precinto.strip(),               # N° de Precinto
                 atendido_por.upper().strip(),   # Atendido por
                 "",                             # Fecha_formateada (se llena al cerrar)
-                "",                             # Campo vacío (placeholder si es necesario)
-                "",                             # Campo vacío (placeholder si es necesario)
+                "",                             # Campo vacío
+                "",                             # Campo vacío
                 id_reclamo                      # ID Reclamo
             ]
 
@@ -275,20 +314,8 @@ def _procesar_envio_formulario(estado, nombre, direccion, telefono, sector, tipo
                     direccion, telefono, precinto, df_clientes, sheet_clientes
                 )
                 
-                # Notificación
-                if 'notification_manager' in st.session_state:
-                    st.session_state.notification_manager.add(
-                        notification_type="nuevo_reclamo",
-                        message=f"📝 Nuevo reclamo {id_reclamo} - {tipo_reclamo}",
-                        user_target="all",
-                        claim_id=id_reclamo
-                    )
-
                 st.cache_data.clear()
 
-                # 🔄 Forzar recarga para limpiar el formulario y mostrar reclamo activo
-                st.rerun()
-                
             else:
                 st.error(f"❌ Error al guardar: {error}")
 
@@ -296,8 +323,6 @@ def _procesar_envio_formulario(estado, nombre, direccion, telefono, sector, tipo
             st.error(f"❌ Error inesperado: {str(e)}")
             if DEBUG_MODE:
                 st.exception(e)
-    
-    return estado
 
 def _gestionar_cliente(nro_cliente, sector, nombre, direccion, telefono, precinto, df_clientes, sheet_clientes):
     """Gestiona la creación o actualización del cliente"""
