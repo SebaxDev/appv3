@@ -76,11 +76,64 @@ def update_sheet_data(sheet, data, is_batch=True):
         return False, str(e)
 
 def batch_update_sheet(sheet, updates):
-    """Realiza múltiples actualizaciones en batch"""
+    """Realiza múltiples actualizaciones en batch con mejor manejo de errores."""
     try:
+        if not updates:
+            return True, "No hay actualizaciones para realizar"
+        
+        # Verificar que las actualizaciones tengan el formato correcto
+        for update in updates:
+            if "range" not in update or "values" not in update:
+                return False, "Formato de actualización incorrecto"
+        
         result, error = api_manager.safe_sheet_operation(
             sheet.batch_update, updates, is_batch=True
         )
-        return result is not None, error
+        
+        if error:
+            st.error(f"Error en batch_update: {error}")
+            # Intentar actualizaciones individuales como fallback
+            individual_errors = []
+            for update in updates:
+                _, err = api_manager.safe_sheet_operation(
+                    sheet.update, update["range"], update["values"]
+                )
+                if err:
+                    individual_errors.append(f"{update['range']}: {err}")
+            
+            if individual_errors:
+                return False, f"Errores individuales: {', '.join(individual_errors)}"
+            else:
+                return True, "Actualizado con actualizaciones individuales"
+        
+        return True, None
+        
     except Exception as e:
-        return False, str(e)
+        return False, f"Error inesperado: {str(e)}"
+
+def _verificar_permisos_escritura(sheet):
+    """Verifica que tenemos permisos de escritura en la hoja."""
+    try:
+        # Intentar una actualización simple de prueba
+        test_range = "A1"
+        original_value, error = api_manager.safe_sheet_operation(sheet.acell, test_range)
+        if error:
+            return False, f"Error de lectura: {error}"
+        
+        # Intentar escribir y luego restaurar
+        test_update, error = api_manager.safe_sheet_operation(
+            sheet.update, test_range, "TEST_WRITE"
+        )
+        if error:
+            return False, f"Error de escritura: {error}"
+        
+        # Restaurar valor original
+        if original_value:
+            api_manager.safe_sheet_operation(
+                sheet.update, test_range, original_value.value
+            )
+        
+        return True, "Permisos de escritura verificados"
+    
+    except Exception as e:
+        return False, f"Error verificando permisos: {str(e)}"

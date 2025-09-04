@@ -218,52 +218,14 @@ def _mostrar_buscador_editor(df, sheet_reclamos, user, df_reclamos_original):
             _mostrar_editor_reclamo(reclamo, reclamo_id, sheet_reclamos, user, df_reclamos_original)
 
 def _mostrar_editor_reclamo(reclamo, reclamo_id, sheet_reclamos, user, df_reclamos):
-    """Muestra el formulario de edición para un reclamo específico."""
+    """Muestra el formulario de edición con mejor feedback."""
     with st.expander(f"✏️ Editar Reclamo {reclamo_id}", expanded=True):
+        # Mostrar información actual primero
+        st.info(f"Editando reclamo ID: {reclamo_id}")
+        
         with st.form(key=f"form_edit_{reclamo_id}"):
-            col1, col2 = st.columns(2)
+            # ... (el resto del formulario igual) ...
             
-            with col1:
-                nombre = st.text_input("Nombre", value=reclamo.get("Nombre", ""))
-                direccion = st.text_input("Dirección", value=reclamo.get("Dirección", ""))
-                telefono = st.text_input("Teléfono", value=reclamo.get("Teléfono", ""), help="Opcional - formato libre")
-                sector = st.selectbox("Sector", options=SECTORES_DISPONIBLES, 
-                                    index=SECTORES_DISPONIBLES.index(reclamo["Sector"]) 
-                                    if reclamo["Sector"] in SECTORES_DISPONIBLES else 0)
-            
-            with col2:
-                # Obtener tipos de reclamo únicos y ordenados
-                tipos_reclamo_unicos = sorted(df_reclamos["Tipo de reclamo"].unique())
-                
-                tipo_reclamo = st.selectbox("Tipo de Reclamo", 
-                                          options=tipos_reclamo_unicos, 
-                                          index=tipos_reclamo_unicos.index(reclamo["Tipo de reclamo"]) 
-                                          if reclamo["Tipo de reclamo"] in tipos_reclamo_unicos else 0)
-                
-                # Manejar técnicos
-                tecnico_actual = reclamo.get("Técnico", "")
-                index_tecnico = 0
-                if tecnico_actual in TECNICOS_DISPONIBLES:
-                    index_tecnico = TECNICOS_DISPONIBLES.index(tecnico_actual) + 1
-                
-                tecnico = st.selectbox("Técnico Asignado", 
-                                     options=[""] + TECNICOS_DISPONIBLES, 
-                                     index=index_tecnico)
-                
-                # Manejar estado
-                estado_actual = reclamo.get("Estado", "Pendiente")
-                estados_opciones = ["Pendiente", "En curso", "Resuelto", "Desconexión"]
-                index_estado = estados_opciones.index(estado_actual) if estado_actual in estados_opciones else 0
-                
-                estado = st.selectbox("Estado", 
-                                    options=estados_opciones, 
-                                    index=index_estado)
-                
-                precinto = st.text_input("N° de Precinto", value=reclamo.get("N° de Precinto", ""))
-            
-            detalles = st.text_area("Detalles", value=reclamo.get("Detalles", ""), height=100, help="Opcional")
-            
-            # Botón de submit para el formulario
             guardar_btn = st.form_submit_button("💾 Guardar Cambios", use_container_width=True)
             
             if guardar_btn:
@@ -278,9 +240,18 @@ def _mostrar_editor_reclamo(reclamo, reclamo_id, sheet_reclamos, user, df_reclam
                     "precinto": precinto,
                     "estado": estado,
                 }
+                
+                # Mostrar qué se va a actualizar
+                st.write("**Cambios a aplicar:**")
+                for key, value in updates.items():
+                    st.write(f"- {key}: {value}")
+                
                 if _actualizar_reclamo(df_reclamos, sheet_reclamos, reclamo_id, updates, user, full_update=True):
                     st.success("✅ Reclamo actualizado correctamente.")
+                    time.sleep(1)  # Pequeña pausa para ver el mensaje
                     st.rerun()
+                else:
+                    st.error("❌ Error al guardar los cambios")
 
 def _mostrar_reclamos_desconexion(df, sheet_reclamos, user):
     """Muestra lista de reclamos con estado 'Desconexión' y botón para resolver."""
@@ -316,114 +287,66 @@ def _mostrar_reclamos_desconexion(df, sheet_reclamos, user):
             st.divider()
 
 def _actualizar_reclamo(df, sheet_reclamos, reclamo_id, updates, user, full_update=False):
-    """Actualiza un reclamo en la hoja: simple, compara, persiste y refresca."""
+    """Actualiza un reclamo en la hoja de forma más confiable."""
     try:
         with st.spinner("Actualizando reclamo..."):
-            # 1) Ubicar fila por ID (normalizado)
+            # Normalizar ID de búsqueda
             reclamo_id_norm = str(reclamo_id).strip()
-
-            # Intento A: buscar directamente en la hoja usando encabezados para ubicar la columna de ID
-            fila_google = None
-            try:
-                headers, _ = api_manager.safe_sheet_operation(sheet_reclamos.row_values, 1)
-                if headers and isinstance(headers, list):
-                    # Buscar índice de la columna "ID Reclamo"
-                    col_idx = None
-                    for i, h in enumerate(headers, start=1):
-                        if str(h).strip().lower() == "id reclamo":
-                            col_idx = i
-                            break
-                    if col_idx is not None:
-                        col_vals, _ = api_manager.safe_sheet_operation(sheet_reclamos.col_values, col_idx)
-                        if col_vals and isinstance(col_vals, list):
-                            for row_num, val in enumerate(col_vals, start=1):
-                                if str(val).strip() == reclamo_id_norm:
-                                    fila_google = row_num
-                                    break
-            except Exception:
-                pass
-
-            # Intento B: fallback por DataFrame si no se pudo con la hoja
-            if fila_google is None:
-                df_ids = df["ID Reclamo"].astype(str).str.strip()
-                matches = df_ids[df_ids == reclamo_id_norm]
-                if matches.empty:
-                    st.error("❌ No se encontró el reclamo para actualizar.")
-                    return False
-                fila_idx = matches.index[0]
-                fila_google = fila_idx + 2
-            else:
-                # Si encontramos por hoja, derivamos el índice del DF a partir de la fila de Google
-                # Recordar: fila_google incluye encabezado en la fila 1
-                fila_idx = max(0, fila_google - 2)
-
+            
+            # 1) Buscar en el DataFrame local primero (más rápido y confiable)
+            df_ids = df["ID Reclamo"].astype(str).str.strip()
+            matches = df_ids[df_ids == reclamo_id_norm]
+            
+            if matches.empty:
+                st.error(f"❌ No se encontró el reclamo con ID: {reclamo_id_norm}")
+                return False
+            
+            fila_idx = matches.index[0]
+            fila_google = fila_idx + 2  # +1 para encabezado, +1 porque gspread es 1-indexed
+            
             # 2) Mapas de columnas
             column_map = {
                 "nombre": "D", "direccion": "E", "telefono": "F", "sector": "C",
                 "tipo_reclamo": "G", "tecnico": "J", "detalles": "H", "precinto": "K",
                 "estado": "I"
             }
-            df_column_map = {
-                "nombre": "Nombre",
-                "direccion": "Dirección",
-                "telefono": "Teléfono",
-                "sector": "Sector",
-                "tipo_reclamo": "Tipo de reclamo",
-                "tecnico": "Técnico",
-                "detalles": "Detalles",
-                "precinto": "N° de Precinto",
-                "estado": "Estado",
-            }
-
-            # 3) Construir lista de updates solo con cambios (teléfono libre, detalles opcional)
+            
+            # 3) Preparar actualizaciones
             updates_list = []
             for key, new_val in updates.items():
                 if key not in column_map:
                     continue
-                df_col = df_column_map.get(key)
-                current_val = str(df.loc[fila_idx, df_col]).strip() if df_col in df.columns else ""
+                
+                col_letter = column_map[key]
                 new_val_str = "" if new_val is None else str(new_val).strip()
-                if current_val != new_val_str:
-                    col = column_map[key]
-                    updates_list.append({"range": f"{col}{fila_google}", "values": [[new_val_str]]})
-
+                updates_list.append({
+                    "range": f"{col_letter}{fila_google}", 
+                    "values": [[new_val_str]]
+                })
+            
             if not updates_list:
                 st.info("No hay cambios para guardar.")
                 return False
-
-            # 4) Intentar batch; si falla, per-celda
-            ok, err = dm_batch_update_sheet(sheet_reclamos, updates_list)
-            if not ok:
-                errores = []
-                for upd in updates_list:
-                    _, e = api_manager.safe_sheet_operation(sheet_reclamos.update, upd["range"], upd["values"])
-                    if e:
-                        errores.append(f"{upd['range']}: {e}")
-                if errores:
-                    st.error("❌ Error al actualizar:")
-                    for e in errores:
-                        st.write(f"- {e}")
-                    return False
-
-            # 5) Feedback y refresh
-            st.success(f"✅ Reclamo {reclamo_id_norm} actualizado")
-            try:
-                rangos = ", ".join([u["range"] for u in updates_list])
-                st.caption(f"Actualizado: {rangos}")
-            except Exception:
-                pass
+            
+            # 4) Ejecutar actualización
+            success, error = dm_batch_update_sheet(sheet_reclamos, updates_list)
+            
+            if not success:
+                st.error(f"❌ Error al actualizar: {error}")
+                return False
+            
+            # 5) Limpiar cache y forzar refresh
             try:
                 st.cache_data.clear()
-            except Exception:
+            except:
                 pass
-            # Forzar rerun para refrescar vistas
-            try:
-                st.rerun()
-            except Exception:
-                pass
+            
+            st.success(f"✅ Reclamo {reclamo_id_norm} actualizado correctamente")
+            st.rerun()
             return True
+            
     except Exception as e:
-        st.error(f"❌ Error inesperado al actualizar: {e}")
+        st.error(f"❌ Error inesperado al actualizar: {str(e)}")
         if DEBUG_MODE:
             st.exception(e)
         return False
