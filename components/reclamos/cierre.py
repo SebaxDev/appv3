@@ -81,9 +81,16 @@ def _handle_resolver_reclamo(reclamo, sheet_reclamos, sheet_clientes, df_cliente
                     if key in st.session_state:
                         del st.session_state[key]
                 
+                # ACTUALIZAR LOS DATOS EN SESSION_STATE PARA QUE DESAPAREZCA INMEDIATAMENTE
+                if 'df_reclamos' in st.session_state:
+                    # Actualizar el estado del reclamo en los datos en memoria
+                    st.session_state.df_reclamos.at[reclamo.name, 'Estado'] = 'Resuelto'
+                    st.session_state.df_reclamos.at[reclamo.name, 'Fecha_formateada'] = fecha_resolucion
+                    st.session_state.df_reclamos.at[reclamo.name, 'Anotaciones'] = anotaciones
+                
                 st.toast(f"✅ Reclamo #{reclamo['Nº Cliente']} marcado como Resuelto.", icon="🎉")
                 
-                _verificar_y_actualizar_filtro()
+                # Forzar rerun para actualizar la interfaz
                 st.rerun()
             else:
                 st.error(f"Error al resolver el reclamo: {error}")
@@ -108,11 +115,16 @@ def _handle_volver_a_pendiente(reclamo, sheet_reclamos):
                 if f"precinto_{id_reclamo}" in st.session_state:
                     del st.session_state[f"precinto_{id_reclamo}"]
                 
+                # ACTUALIZAR LOS DATOS EN SESSION_STATE PARA QUE DESAPAREZCA INMEDIATAMENTE
+                if 'df_reclamos' in st.session_state:
+                    # Actualizar el estado del reclamo en los datos en memoria
+                    st.session_state.df_reclamos.at[reclamo.name, 'Estado'] = 'Pendiente'
+                    st.session_state.df_reclamos.at[reclamo.name, 'Técnico'] = ''
+                    st.session_state.df_reclamos.at[reclamo.name, 'Fecha_formateada'] = ''
+                
                 st.toast(f"↩️ Reclamo #{reclamo['Nº Cliente']} devuelto a Pendiente.", icon="🔄")
                 
-                # Verificar si el filtro actual necesita actualizarse
-                _verificar_y_actualizar_filtro()
-                
+                # Forzar rerun para actualizar la interfaz
                 st.rerun()
             else:
                 st.error(f"Error al devolver a pendiente: {error}")
@@ -207,7 +219,13 @@ def render_cierre_reclamos(df_reclamos, df_clientes, sheet_reclamos, sheet_clien
     st.markdown("---")
     
     try:
-        df_en_curso = df_reclamos[df_reclamos["Estado"].str.strip().str.lower() == "en curso"].copy()
+        # Usar los datos actualizados de session_state si están disponibles
+        if 'df_reclamos' in st.session_state:
+            df_reclamos_actual = st.session_state.df_reclamos
+        else:
+            df_reclamos_actual = df_reclamos
+            
+        df_en_curso = df_reclamos_actual[df_reclamos_actual["Estado"].str.strip().str.lower() == "en curso"].copy()
         df_en_curso["Fecha y hora"] = pd.to_datetime(df_en_curso["Fecha y hora"], dayfirst=True, errors='coerce')
     except Exception as e:
         st.error(f"Error al procesar los datos de reclamos: {e}")
@@ -281,7 +299,6 @@ def render_cierre_reclamos(df_reclamos, df_clientes, sheet_reclamos, sheet_clien
                 with col1:
                     st.markdown(f"**Dirección:** {reclamo.get('Dirección', 'N/A')}")
                     st.markdown(f"**Técnico(s):** `{reclamo.get('Técnico', 'No asignado')}`")
-                    # Quitamos la visualización del detalle aquí para simplificar
                 
                 # Campo de precinto con valor por defecto del reclamo
                 precinto_actual = reclamo.get("N° de Precinto", "")
@@ -321,7 +338,7 @@ def render_cierre_reclamos(df_reclamos, df_clientes, sheet_reclamos, sheet_clien
                     )
 
     # --- Limpieza de Reclamos Antiguos ---
-    _render_limpieza_reclamos(df_reclamos, sheet_reclamos)
+    _render_limpieza_reclamos(df_reclamos_actual, sheet_reclamos)
 
 def _verificar_filtro_automaticamente(df_en_curso):
     """Verifica automáticamente si el filtro actual necesita actualizarse."""
