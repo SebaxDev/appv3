@@ -19,6 +19,7 @@ from config.settings import (
     COLUMNAS_RECLAMOS,
     COLUMNAS_CLIENTES,
     COLUMNAS_USUARIOS,
+    DEBUG_MODE,
 )
 
 # Local components
@@ -34,9 +35,11 @@ from components.new_navigation import render_main_navigation, render_user_info
 
 # Utils
 from utils.styles import get_main_styles_v2
-from utils.data_manager import safe_get_sheet_data
+from utils.data_manager import safe_get_sheet_data, batch_update_sheet
 from utils.permissions import has_permission
 from utils.date_utils import ahora_argentina
+from utils.api_manager import api_manager
+from components.reclamos.nuevo import generar_id_unico
 
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
@@ -78,6 +81,112 @@ def cargar_datos_principales(sheet_reclamos, sheet_clientes, sheet_usuarios):
         df_c = safe_get_sheet_data(sheet_clientes, COLUMNAS_CLIENTES)
         df_u = safe_get_sheet_data(sheet_usuarios, COLUMNAS_USUARIOS)
     return df_r, df_c, df_u
+
+# --- UTILIDAD: Migración de UUIDs existentes ---
+def migrar_uuids_existentes(sheet_reclamos, sheet_clientes):
+    """Genera UUIDs para registros existentes que no los tengan"""
+    try:
+        if not sheet_reclamos or not sheet_clientes:
+            st.error("No se pudo conectar a las hojas de cálculo")
+            return False
+
+        updates_reclamos = []
+        updates_clientes = []
+
+        # Validaciones de columnas
+        if 'ID Reclamo' not in st.session_state.df_reclamos.columns:
+            st.error("La columna 'ID Reclamo' no existe en los datos de reclamos")
+            return False
+
+        if 'ID Cliente' not in st.session_state.df_clientes.columns:
+            st.error("La columna 'ID Cliente' no existe en los datos de clientes")
+            return False
+
+        # Reclamos sin UUID
+        reclamos_sin_uuid = st.session_state.df_reclamos[
+            st.session_state.df_reclamos['ID Reclamo'].isna() |
+            (st.session_state.df_reclamos['ID Reclamo'] == '')
+        ]
+
+        if not reclamos_sin_uuid.empty:
+            with st.status("Generando UUIDs para reclamos...", expanded=True) as status:
+                st.write(f"📋 {len(reclamos_sin_uuid)} reclamos sin UUID encontrados")
+
+                for _, row in reclamos_sin_uuid.iterrows():
+                    nuevo_uuid = generar_id_unico()
+                    updates_reclamos.append({
+                        "range": f"P{row.name + 2}",
+                        "values": [[nuevo_uuid]]
+                    })
+
+                batch_size = 50
+                for i in range(0, len(updates_reclamos), batch_size):
+                    batch = updates_reclamos[i:i + batch_size]
+                    progress = min((i + batch_size) / max(len(updates_reclamos), 1), 1.0)
+                    status.update(label=f"Actualizando reclamos... {progress:.0%}", state="running")
+
+                    success, error = api_manager.safe_sheet_operation(
+                        batch_update_sheet,
+                        sheet_reclamos,
+                        batch,
+                        is_batch=True
+                    )
+                    if not success:
+                        st.error(f"Error al actualizar lote de reclamos: {error}")
+                        return False
+
+                status.update(label="✅ UUIDs para reclamos completados", state="complete", expanded=False)
+
+        # Clientes sin UUID
+        clientes_sin_uuid = st.session_state.df_clientes[
+            st.session_state.df_clientes['ID Cliente'].isna() |
+            (st.session_state.df_clientes['ID Cliente'] == '')
+        ]
+
+        if not clientes_sin_uuid.empty:
+            with st.status("Generando UUIDs para clientes...", expanded=True) as status:
+                st.write(f"👥 {len(clientes_sin_uuid)} clientes sin UUID encontrados")
+
+                for _, row in clientes_sin_uuid.iterrows():
+                    nuevo_uuid = generar_id_unico()
+                    updates_clientes.append({
+                        "range": f"G{row.name + 2}",
+                        "values": [[nuevo_uuid]]
+                    })
+
+                batch_size = 50
+                for i in range(0, len(updates_clientes), batch_size):
+                    batch = updates_clientes[i:i + batch_size]
+                    progress = min((i + batch_size) / max(len(updates_clientes), 1), 1.0)
+                    status.update(label=f"Actualizando clientes... {progress:.0%}", state="running")
+
+                    success, error = api_manager.safe_sheet_operation(
+                        batch_update_sheet,
+                        sheet_clientes,
+                        batch,
+                        is_batch=True
+                    )
+                    if not success:
+                        st.error(f"Error al actualizar lote de clientes: {error}")
+                        return False
+
+                status.update(label="✅ UUIDs para clientes completados", state="complete", expanded=False)
+
+        if not updates_reclamos and not updates_clientes:
+            st.info("ℹ️ Todos los registros ya tienen UUIDs asignados")
+            return False
+
+        # Refrescar DataFrames en caché
+        st.session_state.df_reclamos = safe_get_sheet_data(sheet_reclamos, COLUMNAS_RECLAMOS)
+        st.session_state.df_clientes = safe_get_sheet_data(sheet_clientes, COLUMNAS_CLIENTES)
+
+        return True
+
+    except Exception as e:
+        st.error(f"❌ Error en la migración de UUIDs: {str(e)}")
+        if DEBUG_MODE:
+            st.exception(e)
+        return False
 
 # --- INICIO DE LA APP ---
 sheet_reclamos, sheet_clientes, sheet_usuarios = init_google_sheets()
@@ -128,10 +237,18 @@ with header_cols[2]:
         st.session_state.modo_oscuro = st.session_state.dark_mode_toggle
     st.checkbox("🌙 Modo Oscuro", value=st.session_state.modo_oscuro, key="dark_mode_toggle", on_change=toggle_dark_mode)
 with header_cols[3]:
-    if st.button("Salir 🚪", use_container_width=True):
-        st.session_state.auth['logged_in'] = False
-        st.session_state.auth['user_info'] = {}
-        st.rerun()
+    bcol1, bcol2 = st.columns(2)
+    with bcol1:
+        if st.button("Migrar UUIDs 🔄", use_container_width=True):
+            ok = migrar_uuids_existentes(sheet_reclamos, sheet_clientes)
+            if ok:
+                st.success("Migración completada")
+                st.rerun()
+    with bcol2:
+        if st.button("Salir 🚪", use_container_width=True):
+            st.session_state.auth['logged_in'] = False
+            st.session_state.auth['user_info'] = {}
+            st.rerun()
 
 render_main_navigation()
 

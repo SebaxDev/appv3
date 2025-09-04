@@ -329,11 +329,22 @@ def _gestionar_cliente(nro_cliente, sector, nombre, direccion, telefono, precint
     cliente_existente = df_clientes[df_clientes["Nº Cliente"] == nro_cliente]
     
     if cliente_existente.empty:
-        # Crear nuevo cliente
-        fila_cliente = [nro_cliente, sector, nombre.upper(), direccion.upper(), telefono.strip(), precinto.strip()]
+        # Crear nuevo cliente con UUID y última modificación
+        id_cliente = generar_id_unico()
+        ultima_mod = format_fecha(ahora_argentina())
+        fila_cliente = [
+            nro_cliente,           # A: Nº Cliente
+            sector,                # B: Sector
+            nombre.upper(),        # C: Nombre
+            direccion.upper(),     # D: Dirección
+            telefono.strip(),      # E: Teléfono
+            precinto.strip(),      # F: N° de Precinto
+            id_cliente,            # G: ID Cliente
+            ultima_mod             # H: Última Modificación
+        ]
         success, _ = api_manager.safe_sheet_operation(sheet_clientes.append_row, fila_cliente)
         if success:
-            st.info("ℹ️ Nuevo cliente registrado")
+            st.info("ℹ️ Nuevo cliente registrado con ID asignado")
     else:
         # Actualizar cliente existente
         updates = []
