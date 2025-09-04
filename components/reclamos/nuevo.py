@@ -161,6 +161,13 @@ def render_nuevo_reclamo(df_reclamos, df_clientes, sheet_reclamos, sheet_cliente
                     st.markdown(f"**📌 Tipo:** {reclamo.get('Tipo de reclamo', 'N/A')}")
                     st.markdown(f"**📝 Detalles:** {reclamo.get('Detalles', 'N/A')[:200]}...")
                     st.markdown(f"**⚙️ Estado:** {reclamo.get('Estado', 'Sin estado')}")
+                    
+                    # Mostrar técnico asignado si existe
+                    tecnico_asignado = reclamo.get('Técnico', '').strip()
+                    if tecnico_asignado:
+                        st.markdown(f"**👷 Técnico asignado:** {tecnico_asignado}")
+                    else:
+                        st.markdown("**👷 Técnico asignado:** Sin asignar")
 
     if estado['reclamo_guardado']:
         st.success("✅ Reclamo registrado correctamente.")
@@ -181,6 +188,13 @@ def render_nuevo_reclamo(df_reclamos, df_clientes, sheet_reclamos, sheet_cliente
                     st.markdown(f"**📌 Tipo:** {reclamo.get('Tipo de reclamo', 'N/A')}")
                     st.markdown(f"**📝 Detalles:** {reclamo.get('Detalles', 'N/A')[:200]}...")
                     st.markdown(f"**⚙️ Estado:** {reclamo.get('Estado', 'Sin estado')}")
+                    
+                    # Mostrar técnico asignado si existe
+                    tecnico_asignado = reclamo.get('Técnico', '').strip()
+                    if tecnico_asignado:
+                        st.markdown(f"**👷 Técnico asignado:** {tecnico_asignado}")
+                    else:
+                        st.markdown("**👷 Técnico asignado:** Sin asignar")
         if st.button("📝 Crear nuevo reclamo", type="primary"):
             _reset_formulario()
             st.rerun()
