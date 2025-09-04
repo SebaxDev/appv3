@@ -3,20 +3,15 @@ import streamlit as st
 import pandas as pd
 import uuid
 from utils.date_utils import ahora_argentina, format_fecha, parse_fecha
-from utils.api_manager import api_manager, batch_update_sheet
+from utils.api_manager import api_manager
+from utils.data_manager import batch_update_sheet as dm_batch_update_sheet
 from config.settings import SECTORES_DISPONIBLES
 
 # --- FUNCIONES HELPER NUEVAS ---
 def _validar_telefono(telefono):
-    """Valida el formato del teléfono"""
-    if not telefono.strip():
-        return True, ""  # Vacío es válido (opcional)
-    
-    telefono_limpio = telefono.strip().replace(" ", "").replace("-", "")
-    if telefono_limpio.isdigit():
-        return True, ""
-    else:
-        return False, "⚠️ El teléfono debe contener solo números, espacios o guiones."
+    """Acepta cualquier formato de teléfono (libre)."""
+    # Teléfono completamente libre: cualquier combinación de caracteres es válida, incluyendo vacío
+    return True, ""
 
 def _valores_diferentes(valor1, valor2):
     """Compara valores de forma segura considerando strings y None"""
@@ -141,7 +136,7 @@ def _mostrar_edicion_cliente(df_clientes, df_reclamos, sheet_clientes):
             nuevo_telefono = st.text_input(
                 "📞 Teléfono",
                 value=cliente_actual.get("Teléfono", ""),
-                help="Opcional - solo números, espacios o guiones"
+                help="Opcional - formato libre"
             )
 
             nuevo_precinto = st.text_input(
@@ -162,10 +157,8 @@ def _mostrar_edicion_cliente(df_clientes, df_reclamos, sheet_clientes):
             st.error("❌ La dirección del cliente es obligatoria")
             return cambios
 
-        # USAR FUNCIÓN HELPER PARA VALIDACIÓN DE TELÉFONO
-        telefono_valido, mensaje_error = _validar_telefono(nuevo_telefono)
-        if not telefono_valido:
-            st.warning(mensaje_error)
+        # Validación de teléfono: formato libre, no se bloquea
+        _validar_telefono(nuevo_telefono)
 
         # Verificar consistencia con reclamos
         _verificar_cambios_desde_reclamos(
@@ -336,12 +329,8 @@ def _actualizar_cliente(cliente_row, sheet_clientes, nuevo_sector, nuevo_nombre,
                 {"range": f"H{index}", "values": [[format_fecha(ahora_argentina())]]}
             ]
 
-            success, error = api_manager.safe_sheet_operation(
-                batch_update_sheet,
-                sheet_clientes,
-                updates,
-                is_batch=True
-            )
+            # Ejecutar actualización por lotes con manejo de errores
+            success, error = dm_batch_update_sheet(sheet_clientes, updates)
 
             if success:
                 st.success("✅ Cliente actualizado correctamente.")
@@ -401,12 +390,14 @@ def _mostrar_nuevo_cliente(df_clientes, sheet_clientes):
 
         nuevo_telefono = st.text_input(
             "📞 Teléfono", 
-            placeholder="Número de contacto"
+            placeholder="Número de contacto",
+            help="Opcional - formato libre"
         )
         
         nuevo_precinto = st.text_input(
             "🔒 N° de Precinto (opcional)", 
-            placeholder="Número de precinto"
+            placeholder="Número de precinto",
+            help="Opcional"
         )
 
         guardar_cliente = st.form_submit_button(
@@ -447,10 +438,10 @@ def _guardar_nuevo_cliente(df_clientes, sheet_clientes, nuevo_nro, nuevo_sector,
         st.error("⚠️ Este número de cliente ya existe. Usá otro número.")
         return False
 
-    # Validar formato básico del teléfono (si se ingresó)
-    if nuevo_telefono.strip() and not nuevo_telefono.strip().replace(" ", "").replace("-", "").isdigit():
-        st.warning("⚠️ El teléfono parece tener formato incorrecto. Solo debe contener números, espacios o guiones.")
-        # No return False, solo advertencia
+    # Validar formato del teléfono (si se ingresó)
+    # Teléfono de formato libre: no se bloquea por formato
+    _validar_telefono(nuevo_telefono)
+    # No return False, sin advertencias
 
     with st.spinner("Guardando nuevo cliente..."):
         try:
