@@ -237,18 +237,10 @@ with header_cols[2]:
         st.session_state.modo_oscuro = st.session_state.dark_mode_toggle
     st.checkbox("🌙 Modo Oscuro", value=st.session_state.modo_oscuro, key="dark_mode_toggle", on_change=toggle_dark_mode)
 with header_cols[3]:
-    bcol1, bcol2 = st.columns(2)
-    with bcol1:
-        if st.button("Migrar UUIDs 🔄", use_container_width=True):
-            ok = migrar_uuids_existentes(sheet_reclamos, sheet_clientes)
-            if ok:
-                st.success("Migración completada")
-                st.rerun()
-    with bcol2:
-        if st.button("Salir 🚪", use_container_width=True):
-            st.session_state.auth['logged_in'] = False
-            st.session_state.auth['user_info'] = {}
-            st.rerun()
+    if st.button("Salir 🚪", use_container_width=True):
+        st.session_state.auth['logged_in'] = False
+        st.session_state.auth['user_info'] = {}
+        st.rerun()
 
 render_main_navigation()
 
