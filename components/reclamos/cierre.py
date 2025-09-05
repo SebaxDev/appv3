@@ -88,9 +88,12 @@ def _handle_resolver_reclamo(reclamo, sheet_reclamos, sheet_clientes, df_cliente
                     st.session_state.df_reclamos.at[reclamo.name, 'Fecha_formateada'] = fecha_resolucion
                     st.session_state.df_reclamos.at[reclamo.name, 'Anotaciones'] = anotaciones
                 
+                # MARCAR QUE NECESITAMOS REFRESCAR (como en cierre2.py)
+                st.session_state.force_refresh_cierre = True
+                
                 st.toast(f"✅ Reclamo #{reclamo['Nº Cliente']} marcado como Resuelto.", icon="🎉")
                 
-                # Forzar rerun para actualizar la interfaz
+                # Forzar rerun para actualizar la interfaz inmediatamente
                 st.rerun()
             else:
                 st.error(f"Error al resolver el reclamo: {error}")
@@ -122,9 +125,12 @@ def _handle_volver_a_pendiente(reclamo, sheet_reclamos):
                     st.session_state.df_reclamos.at[reclamo.name, 'Técnico'] = ''
                     st.session_state.df_reclamos.at[reclamo.name, 'Fecha_formateada'] = ''
                 
+                # MARCAR QUE NECESITAMOS REFRESCAR (como en cierre2.py)
+                st.session_state.force_refresh_cierre = True
+                
                 st.toast(f"↩️ Reclamo #{reclamo['Nº Cliente']} devuelto a Pendiente.", icon="🔄")
                 
-                # Forzar rerun para actualizar la interfaz
+                # Forzar rerun para actualizar la interfaz inmediatamente
                 st.rerun()
             else:
                 st.error(f"Error al devolver a pendiente: {error}")
@@ -215,6 +221,15 @@ def _render_limpieza_reclamos(df_reclamos, sheet_reclamos):
 
 def render_cierre_reclamos(df_reclamos, df_clientes, sheet_reclamos, sheet_clientes, user):
     """Renderiza la interfaz para el cierre y gestión de reclamos 'En curso'."""
+    
+    # Manejar el refresh forzado (como en cierre2.py)
+    if st.session_state.get('force_refresh_cierre', False):
+        st.session_state.force_refresh_cierre = False
+        # Limpiar cache y forzar recarga de datos
+        if 'df_reclamos' in st.session_state:
+            del st.session_state.df_reclamos
+        st.rerun()
+    
     st.subheader("✅ Gestión y Cierre de Reclamos")
     st.markdown("---")
     

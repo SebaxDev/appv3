@@ -43,11 +43,11 @@ from components.reclamos.nuevo import generar_id_unico
 
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
-    page_title="Fusion Reclamos CRM",
+    page_title="Fusion Reclamos App",
     page_icon="📋",
     layout="wide",
     menu_items={
-        'About': "Sistema de gestión de reclamos - Fusion CRM v2.6"
+        'About': "Sistema de gestión de reclamos - Fusion Reclamos App v3.0"
     }
 )
 
@@ -210,7 +210,7 @@ if 'modo_oscuro' not in st.session_state:
 st.markdown(get_main_styles_v2(dark_mode=st.session_state.modo_oscuro), unsafe_allow_html=True)
 
 # --- HEADER Y NAVEGACIÓN PRINCIPAL ---
-st.markdown("""<h1 style="text-align: center; margin-bottom: 2rem;">Fusion Reclamos CRM</h1>""", unsafe_allow_html=True)
+st.markdown("""<h1 style="text-align: center; margin-bottom: 2rem;">Fusion Reclamos App</h1>""", unsafe_allow_html=True)
 
 # Métricas compactas para el header (hoy y pendientes)
 try:
@@ -267,4 +267,4 @@ else:
 with st.container():
     render_resumen_jornada(df_reclamos)
 
-st.markdown(f"""<div style="text-align:center; font-size:1rem; color: var(--text-muted); padding-top: 2rem;">Desarrollado con 💜 por Sebastián Andrés (v2.6)</div>""", unsafe_allow_html=True)
+st.markdown(f"""<div style="text-align:center; font-size:1rem; color: var(--text-muted); padding-top: 2rem;">Desarrollado con 💜 por Sebastián Andrés (v3.0)</div>""", unsafe_allow_html=True)

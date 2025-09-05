@@ -195,9 +195,12 @@ def render_nuevo_reclamo(df_reclamos, df_clientes, sheet_reclamos, sheet_cliente
                         st.markdown(f"**👷 Técnico asignado:** {tecnico_asignado}")
                     else:
                         st.markdown("**👷 Técnico asignado:** Sin asignar")
+        
+        # Botón para crear nuevo reclamo después de guardar exitosamente
         if st.button("📝 Crear nuevo reclamo", type="primary"):
             _reset_formulario()
             st.rerun()
+            
     elif not estado['formulario_bloqueado']:
         _mostrar_formulario_reclamo(estado, df_clientes, sheet_reclamos, sheet_clientes, current_user)
 
@@ -205,7 +208,6 @@ def render_nuevo_reclamo(df_reclamos, df_clientes, sheet_reclamos, sheet_cliente
     st.session_state.nuevo_reclamo = estado
 
 # --- FUNCIÓN DE FORMULARIO MEJORADA ---
-
 def _mostrar_formulario_reclamo(estado, df_clientes, sheet_reclamos, sheet_clientes, current_user):
     """Muestra y procesa el formulario de nuevo reclamo con anotaciones previas"""
     
@@ -357,6 +359,9 @@ def _procesar_envio_formulario(estado, nombre, direccion, telefono, sector, tipo
                 )
                 
                 st.cache_data.clear()
+                
+                # 🔄 Forzar recarga para limpiar el formulario y mostrar reclamo activo
+                st.rerun()
 
             else:
                 st.error(f"❌ Error al guardar: {error}")
