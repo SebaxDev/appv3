@@ -6,6 +6,7 @@
 # Standard library
 import streamlit as st
 import pandas as pd
+import time
 from google.oauth2 import service_account
 import gspread
 from tenacity import retry, wait_exponential, stop_after_attempt
@@ -200,6 +201,10 @@ df_reclamos, df_clientes, df_usuarios = cargar_datos_principales(sheet_reclamos,
 st.session_state.df_reclamos = df_reclamos
 st.session_state.df_clientes = df_clientes
 st.session_state.df_usuarios = df_usuarios
+
+# --- OBTENER INFORMACIÓN DEL USUARIO AUTENTICADO ---
+user_info = st.session_state.auth.get('user_info', {})
+opcion = st.session_state.get('current_page', 'Inicio')
 
 # --- ESTADO DE LA PÁGINA Y UI ---
 if 'current_page' not in st.session_state:
