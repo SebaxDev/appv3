@@ -614,7 +614,6 @@ def _guardar_cambios(df_reclamos, sheet_reclamos, grupos_activos):
 
     return False
 
-
 def _generar_pdf_asignaciones(grupos_activos, materiales_por_grupo, df_pendientes):
     """Genera un PDF con las asignaciones de grupos"""
     buffer = io.BytesIO()
@@ -648,15 +647,21 @@ def _generar_pdf_asignaciones(grupos_activos, materiales_por_grupo, df_pendiente
             if not reclamo_data.empty:
                 reclamo = reclamo_data.iloc[0]
                 c.setFont("Helvetica-Bold", 14)
-                c.drawString(40, y, f"{reclamo['Nº Cliente']} - {reclamo['Nombre']}")
+                
+                # Nueva línea: Nombre del cliente con sector entre paréntesis
+                nombre_linea = f"{reclamo['Nº Cliente']} - {reclamo['Nombre']} ({reclamo['Sector']})"
+                c.drawString(40, y, nombre_linea)
                 y -= 15
+                
                 c.setFont("Helvetica", 11)
 
                 fecha_pdf = reclamo['Fecha y hora'].strftime('%d/%m/%Y %H:%M') if not pd.isna(reclamo['Fecha y hora']) else 'Sin fecha'
+                
+                # Líneas modificadas según el formato solicitado
                 lineas = [
                     f"Fecha: {fecha_pdf}",
-                    f"Dirección: {reclamo['Dirección']} - Tel: {reclamo['Teléfono']}",
-                    f"Sector: {reclamo['Sector']} - Precinto: {reclamo.get('N° de Precinto', 'N/A')}",
+                    f"Dirección: {reclamo['Dirección']}",
+                    f"Tel: {reclamo['Teléfono']} - Precinto: {reclamo.get('N° de Precinto', 'N/A')}",
                     f"Tipo: {reclamo['Tipo de reclamo']}",
                     f"Detalles: {reclamo['Detalles'][:100]}..." if len(reclamo['Detalles']) > 100 else f"Detalles: {reclamo['Detalles']}",
                 ]
