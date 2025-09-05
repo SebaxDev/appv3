@@ -410,8 +410,6 @@ def _mostrar_limpieza_reclamos(df_reclamos, sheet_reclamos):
     st.markdown("---")
     st.markdown("### 🗑️ Limpieza de reclamos antiguos")
 
-    tz_argentina = pytz.timezone("America/Argentina/Buenos_Aires")
-    
     # FILTRAR SOLO RECLAMOS RESUELTOS (CONDICIÓN ABSOLUTA)
     df_resueltos = df_reclamos[df_reclamos["Estado"] == "Resuelto"].copy()
     
@@ -419,37 +417,48 @@ def _mostrar_limpieza_reclamos(df_reclamos, sheet_reclamos):
         st.info("No hay reclamos resueltos para analizar.")
         return False
     
-    df_resueltos["Fecha y hora"] = pd.to_datetime(df_resueltos["Fecha y hora"])
-    
-    if df_resueltos["Fecha y hora"].dt.tz is None:
-        df_resueltos["Fecha y hora"] = df_resueltos["Fecha y hora"].dt.tz_localize(tz_argentina)
-    else:
-        df_resueltos["Fecha y hora"] = df_resueltos["Fecha y hora"].dt.tz_convert(tz_argentina)
-    
-    # Calcular días desde la resolución (usando Fecha_formateada si está disponible)
-    df_resueltos["Fecha_formateada"] = pd.to_datetime(df_resueltos["Fecha_formateada"], format='%d/%m/%Y %H:%M', errors='coerce')
-    df_resueltos["Dias_resuelto"] = (datetime.now(tz_argentina) - df_resueltos["Fecha_formateada"]).dt.days
-    
-    # FILTRAR POR MÁS DE 30 DÍAS (EN LUGAR DE 10)
-    df_antiguos = df_resueltos[df_resueltos["Dias_resuelto"] > 30]
-
-    st.markdown(f"📅 **Reclamos resueltos con más de 30 días:** {len(df_antiguos)}")
-
-    if len(df_antiguos) > 0:
-        if st.button("🔍 Ver reclamos antiguos", key="ver_antiguos"):
-            st.dataframe(df_antiguos[["Fecha y hora", "Nº Cliente", "Nombre", "Sector", "Tipo de reclamo", "Dias_resuelto"]])
+    # CÁLCULO SIMPLIFICADO DE FECHAS - SIN ZONAS HORARIAS
+    try:
+        # Convertir fechas a datetime (sin zona horaria)
+        df_resueltos["Fecha_formateada_dt"] = pd.to_datetime(
+            df_resueltos["Fecha_formateada"], 
+            format='%d/%m/%Y %H:%M', 
+            errors='coerce'
+        )
         
-        if st.button("🗑️ Eliminar reclamos antiguos", key="eliminar_antiguos"):
-            with st.spinner("Eliminando reclamos antiguos..."):
-                try:
-                    resultado = _eliminar_reclamos_antiguos(df_antiguos, sheet_reclamos)
-                    return resultado
-                except Exception as e:
-                    st.error(f"❌ Error al eliminar reclamos: {str(e)}")
-                    if DEBUG_MODE:
-                        st.exception(e)
-    
-    return False
+        # Filtrar solo fechas válidas
+        df_resueltos = df_resueltos.dropna(subset=["Fecha_formateada_dt"])
+        
+        # Calcular días desde la resolución (usando fecha actual sin zona horaria)
+        fecha_actual = datetime.now()
+        df_resueltos["Dias_resuelto"] = (fecha_actual - df_resueltos["Fecha_formateada_dt"]).dt.days
+        
+        # FILTRAR POR MÁS DE 30 DÍAS
+        df_antiguos = df_resueltos[df_resueltos["Dias_resuelto"] > 30]
+
+        st.markdown(f"📅 **Reclamos resueltos con más de 30 días:** {len(df_antiguos)}")
+
+        if len(df_antiguos) > 0:
+            if st.button("🔍 Ver reclamos antiguos", key="ver_antiguos"):
+                st.dataframe(df_antiguos[["Fecha_formateada", "Nº Cliente", "Nombre", "Sector", "Tipo de reclamo", "Dias_resuelto"]])
+            
+            if st.button("🗑️ Eliminar reclamos antiguos", key="eliminar_antiguos"):
+                with st.spinner("Eliminando reclamos antiguos..."):
+                    try:
+                        resultado = _eliminar_reclamos_antiguos(df_antiguos, sheet_reclamos)
+                        return resultado
+                    except Exception as e:
+                        st.error(f"❌ Error al eliminar reclamos: {str(e)}")
+                        if DEBUG_MODE:
+                            st.exception(e)
+        
+        return False
+        
+    except Exception as e:
+        st.error(f"❌ Error al procesar fechas: {str(e)}")
+        if DEBUG_MODE:
+            st.exception(e)
+        return False
 
 def _eliminar_reclamos_antiguos(df_antiguos, sheet_reclamos):
     """Elimina reclamos antiguos de la hoja de cálculo"""
