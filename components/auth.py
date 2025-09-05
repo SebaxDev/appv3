@@ -1,10 +1,6 @@
 """
 Componente de autenticación profesional estilo CRM
-Versión mejorada con diseño elegante
-"""
-"""
-Componente de autenticación profesional estilo CRM
-Versión mejorada con diseño elegante
+Versión mejorada con diseño elegante y compatible con Streamlit Cloud
 """
 import streamlit as st
 from utils.data_manager import safe_get_sheet_data
@@ -69,390 +65,52 @@ def verify_credentials(username, password, sheet_usuarios):
         st.error(f"Error en autenticación: {str(e)}")
     return None
 
-def render_login(sheet_usuarios):
-    """Formulario de login con diseño profesional CRM optimizado para una sola pantalla"""
+def render_login_simple(sheet_usuarios):
+    """Versión simple del login para máxima compatibilidad con Streamlit Cloud"""
     
-    # CSS personalizado optimizado siguiendo las pautas de styles.py
-    login_styles = """
-    <style>
-    /* Ocultar elementos de Streamlit para diseño limpio */
-    .stApp > header { visibility: hidden; }
-    .stApp > div:first-child { visibility: hidden; }
+    # Centrar el contenido
+    col1, col2, col3 = st.columns([1, 2, 1])
     
-    /* Contenedor principal optimizado para una sola pantalla */
-    .login-container {
-        max-width: 420px;
-        margin: 0 auto;
-        padding: 2rem;
-        background: var(--bg-card);
-        border-radius: var(--radius-xl);
-        border: 1px solid var(--border-color);
-        box-shadow: var(--shadow-lg);
-        text-align: center;
-        position: relative;
-        top: 50%;
-        transform: translateY(-50%);
-        min-height: 500px;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-    }
-    
-    /* Header compacto */
-    .login-header {
-        margin-bottom: 1.5rem;
-    }
-    
-    .login-logo {
-        font-size: 2.5rem;
-        margin-bottom: 0.5rem;
-        background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 50%, var(--info-color) 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
-    }
-    
-    .login-title {
-        font-size: 1.5rem;
-        font-weight: 700;
-        margin-bottom: 0.25rem;
-        color: var(--text-primary);
-        letter-spacing: -0.025em;
-    }
-    
-    .login-subtitle {
-        color: var(--text-secondary);
-        margin-bottom: 1.5rem;
-        font-size: 0.9rem;
-        font-weight: 400;
-    }
-    
-    /* Formulario compacto */
-    .login-form {
-        text-align: left;
-        margin-bottom: 1rem;
-    }
-    
-    .login-input {
-        margin-bottom: 1rem;
-    }
-    
-    .login-input .stTextInput > div > div > input {
-        background-color: var(--bg-surface);
-        border: 1px solid var(--border-color);
-        border-radius: var(--radius-md);
-        padding: 0.75rem;
-        color: var(--text-primary);
-        font-size: 0.9rem;
-        transition: all 0.2s ease;
-        height: 44px;
-    }
-    
-    .login-input .stTextInput > div > div > input:focus {
-        border-color: var(--primary-color);
-        box-shadow: 0 0 0 3px rgba(102, 217, 239, 0.2);
-        outline: none;
-    }
-    
-    .login-input .stTextInput > div > div > input::placeholder {
-        color: var(--text-muted);
-    }
-    
-    /* Botón optimizado */
-    .login-button {
-        width: 100%;
-        margin-top: 0.5rem;
-        padding: 0.875rem;
-        font-size: 0.95rem;
-        font-weight: 600;
-        background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-light) 100%);
-        color: var(--bg-primary);
-        border: none;
-        border-radius: var(--radius-lg);
-        transition: all 0.3s ease;
-        cursor: pointer;
-        box-shadow: var(--shadow-md);
-    }
-    
-    .login-button:hover {
-        background: linear-gradient(135deg, var(--primary-light) 0%, var(--primary-color) 100%);
-        transform: translateY(-2px);
-        box-shadow: var(--shadow-lg);
-    }
-    
-    /* Footer compacto */
-    .login-footer {
-        margin-top: 1rem;
-        padding-top: 1rem;
-        border-top: 1px solid var(--border-light);
-        color: var(--text-muted);
-        font-size: 0.8rem;
-        line-height: 1.4;
-    }
-    
-    /* Mensajes de estado mejorados */
-    .login-error {
-        background: rgba(255, 97, 136, 0.1);
-        border: 1px solid rgba(255, 97, 136, 0.3);
-        color: var(--danger-color);
-        padding: 0.75rem;
-        border-radius: var(--radius-md);
-        margin: 0.75rem 0;
-        text-align: center;
-        font-size: 0.85rem;
-        font-weight: 500;
-    }
-    
-    .login-success {
-        background: rgba(166, 226, 46, 0.1);
-        border: 1px solid rgba(166, 226, 46, 0.3);
-        color: var(--success-color);
-        padding: 0.75rem;
-        border-radius: var(--radius-md);
-        margin: 0.75rem 0;
-        text-align: center;
-        font-size: 0.85rem;
-        font-weight: 500;
-    }
-    
-    /* Iconos de input mejorados */
-    .input-icon {
-        font-size: 1.25rem;
-        padding-top: 0.75rem;
-        color: var(--text-muted);
-        transition: color 0.2s ease;
-    }
-    
-    .input-icon:hover {
-        color: var(--primary-color);
-    }
-    
-    /* Responsive design para pantallas pequeñas */
-    @media (max-height: 700px) {
-        .login-container {
-            transform: none;
-            top: 0;
-            margin: 1rem auto;
-            min-height: auto;
-            padding: 1.5rem;
-        }
-        
-        .login-logo {
-            font-size: 2rem;
-        }
-        
-        .login-title {
-            font-size: 1.25rem;
-        }
-        
-        .login-subtitle {
-            margin-bottom: 1rem;
-        }
-    }
-    
-    @media (max-width: 480px) {
-        .login-container {
-            margin: 0.5rem;
-            padding: 1.25rem;
-            max-width: none;
-        }
-        
-        .login-logo {
-            font-size: 1.75rem;
-        }
-        
-        .login-title {
-            font-size: 1.1rem;
-        }
-        
-        .login-subtitle {
-            font-size: 0.85rem;
-        }
-    }
-    
-    /* Mejoras para tablets */
-    @media (min-width: 768px) and (max-width: 1024px) {
-        .login-container {
-            max-width: 450px;
-            padding: 2.5rem;
-        }
-    }
-    
-    /* Mejoras para pantallas muy grandes */
-    @media (min-width: 1400px) {
-        .login-container {
-            max-width: 480px;
-            padding: 3rem;
-        }
-        
-        .login-logo {
-            font-size: 3rem;
-        }
-        
-        .login-title {
-            font-size: 1.75rem;
-        }
-    }
-    
-    /* Animación de entrada suave */
-    .login-container {
-        animation: slideInUp 0.6s ease-out;
-    }
-    
-    @keyframes slideInUp {
-        from {
-            opacity: 0;
-            transform: translateY(30px);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(-50%);
-        }
-    }
-    
-    @media (max-height: 700px) {
-        @keyframes slideInUp {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-    }
-    </style>
-    """
-    
-    st.markdown(login_styles, unsafe_allow_html=True)
-    
-    st.markdown("""
-    <div class="login-container">
-        <div class="login-header">
-            <div class="login-logo">⚡</div>
-            <h1 class="login-title">Fusion Reclamos</h1>
-            <p class="login-subtitle">Sistema de gestión profesional</p>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    # Inicializar estado de carga
-    if 'login_loading' not in st.session_state:
-        st.session_state.login_loading = False
-    if 'login_attempt' not in st.session_state:
-        st.session_state.login_attempt = False
-    if 'login_username' not in st.session_state:
-        st.session_state.login_username = ""
-    if 'login_password' not in st.session_state:
-        st.session_state.login_password = ""
-    
-    # Mostrar spinner si está cargando
-    if st.session_state.login_loading:
-        st.markdown(get_loading_spinner(), unsafe_allow_html=True)
+    with col2:
         st.markdown("""
-        <div style="text-align: center; margin-top: 20px;">
-            <p style="color: var(--text-secondary);">Verificando credenciales...</p>
+        <div style="text-align: center; margin: 2rem 0;">
+            <h1 style="color: #66D9EF; margin-bottom: 0.5rem;">⚡ Fusion Reclamos</h1>
+            <p style="color: #CFCFC2; margin-bottom: 2rem;">Sistema de gestión profesional</p>
         </div>
         """, unsafe_allow_html=True)
         
-        # Procesar la autenticación
-        try:
-            user_info = verify_credentials(
-                st.session_state.login_username, 
-                st.session_state.login_password, 
-                sheet_usuarios
-            )
+        # Formulario de login simple
+        with st.form("login_form"):
+            username = st.text_input("👤 Usuario", placeholder="Ingresa tu usuario")
+            password = st.text_input("🔒 Contraseña", type="password", placeholder="Ingresa tu contraseña")
             
-            if user_info:
-                st.session_state.auth = {
-                    'logged_in': True,
-                    'user_info': user_info
-                }
-                st.session_state.login_loading = False
-                st.session_state.login_attempt = False
-                st.rerun()
-            else:
-                st.session_state.login_loading = False
-                st.session_state.login_attempt = True
-                st.rerun()
-                
-        except Exception as e:
-            st.session_state.login_loading = False
-            st.session_state.login_attempt = True
-            st.error(f"Error en autenticación: {str(e)}")
-            st.rerun()
-    
-    else:
-        # Mostrar mensaje de error si hubo un intento fallido
-        if st.session_state.login_attempt:
-            st.error("❌ Credenciales incorrectas o usuario inactivo")
-            st.session_state.login_attempt = False
-        
-        # Formulario de login compacto
-        with st.form("login_formulario"):
-            st.markdown('<div class="login-form">', unsafe_allow_html=True)
-            
-            # Campo de usuario con icono optimizado
-            col1, col2 = st.columns([1, 8])
-            with col1:
-                st.markdown('<div class="input-icon">👤</div>', unsafe_allow_html=True)
-            with col2:
-                username = st.text_input("Usuario", placeholder="Usuario", 
-                                       value=st.session_state.login_username,
-                                       label_visibility="collapsed",
-                                       key="username_input").strip()
-            
-            # Campo de contraseña con icono optimizado
-            col1, col2 = st.columns([1, 8])
-            with col1:
-                st.markdown('<div class="input-icon">🔒</div>', unsafe_allow_html=True)
-            with col2:
-                password = st.text_input("Contraseña", type="password", 
-                                       placeholder="Contraseña", 
-                                       value=st.session_state.login_password,
-                                       label_visibility="collapsed",
-                                       key="password_input")
-            
-            st.markdown('</div>', unsafe_allow_html=True)
-            
-            # Botón de login con estilo personalizado
-            if st.form_submit_button("🚀 Ingresar", use_container_width=True, key="login_btn"):
-                if not username or not password:
-                    st.error("⚠️ Usuario y contraseña son requeridos")
+            if st.form_submit_button("🚀 Ingresar al sistema", use_container_width=True):
+                if username and password:
+                    user_info = verify_credentials(username, password, sheet_usuarios)
+                    if user_info:
+                        st.session_state.auth = {
+                            'logged_in': True,
+                            'user_info': user_info
+                        }
+                        st.success(f"✅ Bienvenido, {user_info['nombre']}!")
+                        st.rerun()
+                    else:
+                        st.error("❌ Credenciales incorrectas o usuario inactivo")
                 else:
-                    # Guardar credenciales y activar loading
-                    st.session_state.login_username = username
-                    st.session_state.login_password = password
-                    st.session_state.login_loading = True
-                    st.rerun()
-    
-    st.markdown("""
-        <div class="login-footer">
+                    st.error("⚠️ Usuario y contraseña son requeridos")
+        
+        st.markdown("""
+        <div style="text-align: center; margin-top: 2rem; color: #75715E; font-size: 0.8rem;">
             <p>© 2025 Fusion Reclamos • v3.0</p>
             <p>Sistema optimizado para gestión eficiente</p>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
+
+def render_login(sheet_usuarios):
+    """Formulario de login con diseño profesional CRM optimizado para una sola pantalla"""
     
-    # Procesar login después del render
-    if st.session_state.login_loading:
-        time.sleep(0.5)  # Pequeña pausa para el efecto visual
-        user_info = verify_credentials(username, password, sheet_usuarios)
-        
-        if user_info:
-            st.session_state.auth = {
-                'logged_in': True,
-                'user_info': user_info
-            }
-            st.session_state.login_loading = False
-            st.success(f"✅ Bienvenido, {user_info['nombre']}!")
-            time.sleep(1)
-            st.rerun()
-        else:
-            st.session_state.login_loading = False
-            st.error("❌ Credenciales incorrectas o usuario inactivo")
-            time.sleep(2)
-            st.rerun()
+    # Usar la versión simple por defecto para evitar problemas en Streamlit Cloud
+    render_login_simple(sheet_usuarios)
 
 def check_authentication():
     """Verifica si el usuario está autenticado"""
