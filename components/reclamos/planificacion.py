@@ -410,95 +410,71 @@ def render_planificacion_grupos(df_reclamos, sheet_reclamos, user):
         inicializar_estado_grupos()
         _limpiar_asignaciones(df_reclamos)
 
-        # CONTROLES PRINCIPALES
-        with st.container():
-            col_a, col_b, col_c = st.columns([2, 2, 1])
-            with col_a:
-                grupos_activos = st.slider("🔢 Cantidad de grupos de trabajo activos", 1, 5, 2)
-            with col_b:
-                modo_distribucion = st.selectbox(
-                    "📊 Elegí el modo de distribución",
-                    ["Manual", "Automática por sector (mejorada)", "Automática por tipo de reclamo"],
-                    index=0
-                )
-            with col_c:
-                refrescar = st.button("🔄 Refrescar", use_container_width=True)
+        grupos_activos = st.slider("🔢 Cantidad de grupos de trabajo activos", 1, 5, 2)
 
-        if refrescar:
+        modo_distribucion = st.selectbox(
+            "📊 Elegí el modo de distribución",
+            ["Manual", "Automática por sector (mejorada)", "Automática por tipo de reclamo"],
+            index=0
+        )
+
+        if modo_distribucion != "Manual":
+            if st.button("⚙️ Distribuir reclamos ahora"):
+                if modo_distribucion == "Automática por sector (mejorada)":
+                    st.session_state.simulacion_asignaciones = distribuir_por_sector_mejorado(df_reclamos, grupos_activos)
+
+                    # Mostrar zonas asignadas por grupo con el algoritmo mejorado
+                    zonas_por_grupo = agrupar_zonas_completas(
+                        list(SECTORES_VECINOS.keys()),
+                        GRUPOS_POSIBLES[:grupos_activos],
+                        df_reclamos
+                    )
+                    st.markdown("### 🗺️ Zonas asignadas por grupo (mejorado):")
+                    for grupo, zonas_asignadas in zonas_por_grupo.items():
+                        st.markdown(f"- **{grupo}** cubre: {', '.join(zonas_asignadas)}")
+
+                else:
+                    st.session_state.simulacion_asignaciones = distribuir_por_tipo(df_reclamos, grupos_activos)
+
+                st.session_state.vista_simulacion = True
+                st.success("✅ Distribución previa generada. Revisala antes de guardar.")
+
+        if st.session_state.get("vista_simulacion"):
+            st.subheader("🗂️ Distribución previa de reclamos")
+            for grupo, reclamos in st.session_state.simulacion_asignaciones.items():
+                st.markdown(f"### 📦 {grupo} - {len(reclamos)} reclamos")
+                for rid in reclamos:
+                    row = df_reclamos[df_reclamos["ID Reclamo"] == rid]
+                    if not row.empty:
+                        r = row.iloc[0]
+                        st.markdown(f"- {r['Nº Cliente']} | {r['Tipo de reclamo']} | Sector {r['Sector']}")
+
+            # Solo opción de confirmar, sin generar PDF en la simulación
+            if st.button("💾 Confirmar y guardar esta asignación"):
+                for g in GRUPOS_POSIBLES:
+                    st.session_state.asignaciones_grupos[g] = []
+                        
+                st.session_state.asignaciones_grupos = st.session_state.simulacion_asignaciones
+                st.session_state.vista_simulacion = False
+                st.success("✅ Asignaciones aplicadas.")
+                st.rerun()
+
+        if st.button("🔄 Refrescar reclamos"):
             st.cache_data.clear()
             return {'needs_refresh': True}
 
-        st.divider()
+        _mostrar_asignacion_tecnicos(grupos_activos)
+        df_pendientes = _mostrar_reclamos_disponibles(df_reclamos, grupos_activos)
 
-        # SIMULACIÓN (distribución automática) COMO SECCIÓN PLEGABLE
-        if modo_distribucion != "Manual":
-            with st.expander("⚙️ Generar distribución automática (opcional)", expanded=False):
-                if st.button("🚀 Generar pre-distribución", key="btn_generar_auto"):
-                    if modo_distribucion == "Automática por sector (mejorada)":
-                        st.session_state.simulacion_asignaciones = distribuir_por_sector_mejorado(df_reclamos, grupos_activos)
-
-                        zonas_por_grupo = agrupar_zonas_completas(
-                            list(SECTORES_VECINOS.keys()),
-                            GRUPOS_POSIBLES[:grupos_activos],
-                            df_reclamos
-                        )
-                        st.markdown("### 🗺️ Zonas asignadas por grupo (mejorado):")
-                        for grupo, zonas_asignadas in zonas_por_grupo.items():
-                            st.markdown(f"- **{grupo}** cubre: {', '.join(zonas_asignadas)}")
-                    else:
-                        st.session_state.simulacion_asignaciones = distribuir_por_tipo(df_reclamos, grupos_activos)
-
-                    st.session_state.vista_simulacion = True
-                    st.success("✅ Distribución previa generada. Revisala antes de guardar.")
-
-            if st.session_state.get("vista_simulacion"):
-                with st.expander("🗂️ Ver distribución previa generada", expanded=True):
-                    for grupo, reclamos in st.session_state.simulacion_asignaciones.items():
-                        st.markdown(f"### 📦 {grupo} - {len(reclamos)} reclamos")
-                        for rid in reclamos:
-                            row = df_reclamos[df_reclamos["ID Reclamo"] == rid]
-                            if not row.empty:
-                                r = row.iloc[0]
-                                st.markdown(f"- {r['Nº Cliente']} | {r['Tipo de reclamo']} | Sector {r['Sector']}")
-
-                    if st.button("💾 Confirmar y aplicar esta asignación", key="btn_confirmar_simulacion"):
-                        for g in GRUPOS_POSIBLES:
-                            st.session_state.asignaciones_grupos[g] = []
-                        st.session_state.asignaciones_grupos = st.session_state.simulacion_asignaciones
-                        st.session_state.vista_simulacion = False
-                        st.success("✅ Asignaciones aplicadas.")
-                        st.rerun()
-
-        st.divider()
-
-        # TABS PRINCIPALES
-        tab_pendientes, tab_asignados, tab_finalizar = st.tabs(["📋 Pendientes", "📌 Asignados", "✅ Finalizar"])
-
-        df_pendientes_full = df_reclamos[df_reclamos["Estado"] == "Pendiente"].copy()
-        materiales_por_grupo = {}
-        cambios = False
-
-        with tab_pendientes:
-            _mostrar_asignacion_tecnicos(grupos_activos)
-            df_pendientes_filtrado = _mostrar_reclamos_disponibles(df_reclamos, grupos_activos)
-
-        with tab_asignados:
-            base_para_asignados = df_pendientes_full
-            materiales_por_grupo = _mostrar_reclamos_asignados(base_para_asignados, grupos_activos)
-
-        with tab_finalizar:
-            # Si no se navegó por "Asignados" aún, calculamos materiales acá para no romper el flujo
-            if not materiales_por_grupo:
-                materiales_por_grupo = _mostrar_reclamos_asignados(df_pendientes_full, grupos_activos)
+        if df_pendientes is not None:
+            materiales_por_grupo = _mostrar_reclamos_asignados(df_pendientes, grupos_activos)
             cambios = _mostrar_acciones_finales(
-                df_reclamos,
-                sheet_reclamos,
-                grupos_activos,
-                materiales_por_grupo,
-                df_pendientes_full,
+                df_reclamos, sheet_reclamos, 
+                grupos_activos, materiales_por_grupo, df_pendientes
             )
+            return {'needs_refresh': cambios}
 
-        return {'needs_refresh': cambios}
+        return {'needs_refresh': False}
 
     except Exception as e:
         st.error(f"❌ Error en la planificación: {str(e)}")
