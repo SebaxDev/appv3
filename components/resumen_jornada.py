@@ -2,7 +2,7 @@
 
 import streamlit as st
 import pandas as pd
-from utils.date_utils import ahora_argentina
+from utils.date_utils import ahora_argentina, format_fecha
 
 def render_resumen_jornada(df_reclamos):
     """Muestra un resumen conciso con los reclamos del día, pendientes y en curso."""
@@ -42,6 +42,40 @@ def render_resumen_jornada(df_reclamos):
         with col3:
             st.metric(label="⚙️ En Curso", value=len(en_curso))
 
+        # 👷 SECCIÓN DE TÉCNICOS - INTEGRACIÓN DEL NUEVO CÓDIGO
+        st.markdown("### 👷 Reclamos en curso por técnicos")
+
+        if not en_curso.empty and "Técnico" in en_curso.columns:
+            en_curso["Técnico"] = en_curso["Técnico"].fillna("").astype(str)
+            en_curso = en_curso[en_curso["Técnico"].str.strip() != ""]
+
+            en_curso["tecnicos_set"] = en_curso["Técnico"].apply(
+                lambda x: tuple(sorted([t.strip().upper() for t in x.split(",") if t.strip()]))
+            )
+
+            conteo_grupos = en_curso.groupby("tecnicos_set").size().reset_index(name="Cantidad")
+
+            if not conteo_grupos.empty:
+                st.markdown("#### Distribución de trabajo:")
+                for fila in conteo_grupos.itertuples():
+                    tecnicos = ", ".join(fila.tecnicos_set)
+                    st.markdown(f"- 👥 **{tecnicos}**: {fila.Cantidad} reclamos")
+
+                reclamos_antiguos = en_curso.sort_values("Fecha y hora").head(3)
+                if not reclamos_antiguos.empty:
+                    st.markdown("#### ⏳ Reclamos más antiguos aún en curso:")
+                    for _, row in reclamos_antiguos.iterrows():
+                        fecha_formateada = format_fecha(row["Fecha y hora"])
+                        st.markdown(
+                            f"- **{row['Nombre']}** ({row['Nº Cliente']}) - "
+                            f"Desde: {fecha_formateada} - "
+                            f"Técnicos: {row['Técnico']}"
+                        )
+            else:
+                st.info("No hay técnicos asignados actualmente a reclamos en curso.")
+        else:
+            st.info("No hay reclamos en curso en este momento.")
+
     except Exception as e:
         st.error(f"Ocurrió un error al generar el resumen: {e}")
-        st.exception(e) # Para debugging si es necesario
+        st.exception(e)  # Para debugging si es necesario

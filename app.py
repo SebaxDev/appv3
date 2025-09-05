@@ -244,24 +244,83 @@ with header_cols[3]:
 
 render_main_navigation()
 
-# --- RUTEO DE COMPONENTES ---
-opcion = st.session_state.current_page
-user_info = st.session_state.auth.get('user_info', {})
-user_role = user_info.get('rol', '')
+# --------------------------
+# RUTEO DE COMPONENTES
+# --------------------------
 
 COMPONENTES = {
-    "Inicio": {"render": render_nuevo_reclamo, "permiso": "inicio", "params": {"df_reclamos": df_reclamos, "df_clientes": df_clientes, "sheet_reclamos": sheet_reclamos, "sheet_clientes": sheet_clientes, "current_user": user_info.get('nombre', '')}},
-    "Reclamos cargados": {"render": render_gestion_reclamos, "permiso": "reclamos_cargados", "params": {"df_reclamos": df_reclamos, "df_clientes": df_clientes, "sheet_reclamos": sheet_reclamos, "user": user_info}},
-    "Gestión de clientes": {"render": render_gestion_clientes, "permiso": "gestion_clientes", "params": {"df_clientes": df_clientes, "df_reclamos": df_reclamos, "sheet_clientes": sheet_clientes, "user_role": user_role}},
-    "Imprimir reclamos": {"render": render_impresion_reclamos, "permiso": "imprimir_reclamos", "params": {"df_clientes": df_clientes, "df_reclamos": df_reclamos, "user": user_info}},
-    "Seguimiento técnico": {"render": render_planificacion_grupos, "permiso": "seguimiento_tecnico", "params": {"df_reclamos": df_reclamos, "sheet_reclamos": sheet_reclamos, "user": user_info}},
-    "Cierre de Reclamos": {"render": render_cierre_reclamos, "permiso": "cierre_reclamos", "params": {"df_reclamos": df_reclamos, "df_clientes": df_clientes, "sheet_reclamos": sheet_reclamos, "sheet_clientes": sheet_clientes, "user": user_info}},
+    "Inicio": {
+        "render": render_nuevo_reclamo,
+        "permiso": "inicio",
+        "params": {
+            "df_reclamos": df_reclamos,
+            "df_clientes": df_clientes,
+            "sheet_reclamos": sheet_reclamos,
+            "sheet_clientes": sheet_clientes,
+            "current_user": user_info.get('nombre', '')
+        }
+    },
+    "Reclamos cargados": {
+        "render": render_gestion_reclamos,
+        "permiso": "reclamos_cargados",
+        "params": {
+            "df_reclamos": df_reclamos,
+            "df_clientes": df_clientes,
+            "sheet_reclamos": sheet_reclamos,
+            "user": user_info
+        }
+    },
+    "Gestión de clientes": {
+        "render": render_gestion_clientes,
+        "permiso": "gestion_clientes",
+        "params": {
+            "df_clientes": df_clientes,
+            "df_reclamos": df_reclamos,
+            "sheet_clientes": sheet_clientes,
+            "user_role": user_info.get('rol', '')
+        }
+    },
+    "Imprimir reclamos": {
+        "render": render_impresion_reclamos,
+        "permiso": "imprimir_reclamos",
+        "params": {
+            "df_clientes": df_clientes,
+            "df_reclamos": df_reclamos,
+            "user": user_info
+        }
+    },
+    "Seguimiento técnico": {
+        "render": render_planificacion_grupos,
+        "permiso": "seguimiento_tecnico",
+        "params": {
+            "df_reclamos": df_reclamos,
+            "sheet_reclamos": sheet_reclamos,
+            "user": user_info
+        }
+    },
+    "Cierre de Reclamos": {
+        "render": render_cierre_reclamos,
+        "permiso": "cierre_reclamos",
+        "params": {
+            "df_reclamos": df_reclamos,
+            "df_clientes": df_clientes,
+            "sheet_reclamos": sheet_reclamos,
+            "sheet_clientes": sheet_clientes,
+            "user": user_info
+        }
+    }
 }
 
+# Renderizar componente seleccionado
 if opcion in COMPONENTES and has_permission(COMPONENTES[opcion]["permiso"]):
-    COMPONENTES[opcion]["render"](**COMPONENTES[opcion]["params"])
-else:
-    st.error(f"No tienes permiso para acceder a '{opcion}' o la página no existe.")
+    with st.container():
+        st.markdown("---")
+        resultado = COMPONENTES[opcion]["render"](**COMPONENTES[opcion]["params"])
+        
+        if resultado and resultado.get('needs_refresh'):
+            st.cache_data.clear()
+            time.sleep(1)
+            st.rerun()
 
 # --- FOOTER Y RESUMEN ---
 with st.container():
