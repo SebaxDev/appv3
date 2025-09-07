@@ -13,10 +13,93 @@ from config.settings import (
     SECTORES_DISPONIBLES,
     TECNICOS_DISPONIBLES,
     MATERIALES_POR_RECLAMO,
-    ROUTER_POR_SECTOR
+    ROUTER_POR_SECTOR,
+    DEBUG_MODE
 )
+import uuid
 
 GRUPOS_POSIBLES = [f"Grupo {letra}" for letra in "ABCDE"]
+
+def generar_id_unico():
+    """Genera un ID único para reclamos y clientes"""
+    return str(uuid.uuid4())[:8].upper()
+
+def _generar_uuids_faltantes(df_reclamos, df_clientes, sheet_reclamos, sheet_clientes):
+    """
+    Genera UUIDs para reclamos y clientes que no los tengan.
+    Retorna True si se generaron UUIDs, False en caso contrario.
+    """
+    updates_reclamos = []
+    updates_clientes = []
+    uuids_generados = False
+    
+    try:
+        # Verificar reclamos sin UUID
+        if 'ID Reclamo' in df_reclamos.columns:
+            reclamos_sin_uuid = df_reclamos[
+                df_reclamos['ID Reclamo'].isna() |
+                (df_reclamos['ID Reclamo'] == '') |
+                (df_reclamos['ID Reclamo'].astype(str).str.strip() == '')
+            ]
+            
+            if not reclamos_sin_uuid.empty:
+                for _, row in reclamos_sin_uuid.iterrows():
+                    nuevo_uuid = generar_id_unico()
+                    updates_reclamos.append({
+                        "range": f"P{row.name + 2}",  # Columna P es ID Reclamo
+                        "values": [[nuevo_uuid]]
+                    })
+        
+        # Verificar clientes sin UUID
+        if 'ID Cliente' in df_clientes.columns:
+            clientes_sin_uuid = df_clientes[
+                df_clientes['ID Cliente'].isna() |
+                (df_clientes['ID Cliente'] == '') |
+                (df_clientes['ID Cliente'].astype(str).str.strip() == '')
+            ]
+            
+            if not clientes_sin_uuid.empty:
+                for _, row in clientes_sin_uuid.iterrows():
+                    nuevo_uuid = generar_id_unico()
+                    updates_clientes.append({
+                        "range": f"G{row.name + 2}",  # Columna G es ID Cliente
+                        "values": [[nuevo_uuid]]
+                    })
+        
+        # Aplicar actualizaciones si hay alguna
+        if updates_reclamos:
+            success, error = api_manager.safe_sheet_operation(
+                batch_update_sheet, 
+                sheet_reclamos, 
+                updates_reclamos, 
+                is_batch=True
+            )
+            if success:
+                uuids_generados = True
+                st.success(f"✅ Se generaron {len(updates_reclamos)} UUIDs para reclamos")
+            else:
+                st.error(f"❌ Error al generar UUIDs para reclamos: {error}")
+        
+        if updates_clientes:
+            success, error = api_manager.safe_sheet_operation(
+                batch_update_sheet, 
+                sheet_clientes, 
+                updates_clientes, 
+                is_batch=True
+            )
+            if success:
+                uuids_generados = True
+                st.success(f"✅ Se generaron {len(updates_clientes)} UUIDs para clientes")
+            else:
+                st.error(f"❌ Error al generar UUIDs para clientes: {error}")
+        
+        if not updates_reclamos and not updates_clientes:
+            st.info("ℹ️ Todos los reclamos y clientes ya tienen UUIDs asignados")
+            
+    except Exception as e:
+        st.error(f"❌ Error al verificar/generar UUIDs: {str(e)}")
+    
+    return uuids_generados
 
 # Mapeo de sectores cercanos por zona
 SECTORES_VECINOS = {
@@ -399,7 +482,7 @@ def _limpiar_asignaciones(df_reclamos):
             if str(id) in ids_validos
         ]
 
-def render_planificacion_grupos(df_reclamos, sheet_reclamos, user):
+def render_planificacion_grupos(df_reclamos, sheet_reclamos, user, df_clientes=None, sheet_clientes=None):
     if user.get('rol') != 'admin':
         st.warning("⚠️ Solo los administradores pueden acceder a esta sección")
         return {'needs_refresh': False}
@@ -461,6 +544,12 @@ def render_planificacion_grupos(df_reclamos, sheet_reclamos, user):
 
         if st.button("🔄 Refrescar reclamos"):
             st.cache_data.clear()
+            
+            # Generar UUIDs faltantes si se tienen los datos necesarios
+            if df_clientes is not None and sheet_clientes is not None:
+                with st.spinner("Verificando y generando UUIDs faltantes..."):
+                    _generar_uuids_faltantes(df_reclamos, df_clientes, sheet_reclamos, sheet_clientes)
+            
             return {'needs_refresh': True}
 
         _mostrar_asignacion_tecnicos(grupos_activos)
@@ -704,3 +793,4 @@ def _generar_pdf_asignaciones(grupos_activos, materiales_por_grupo, df_pendiente
         file_name="asignaciones_grupos.pdf",
         mime="application/pdf"
     )
+    

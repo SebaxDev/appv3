@@ -300,7 +300,9 @@ COMPONENTES = {
         "params": {
             "df_reclamos": df_reclamos,
             "sheet_reclamos": sheet_reclamos,
-            "user": user_info
+            "user": user_info,
+            "df_clientes": df_clientes,
+            "sheet_clientes": sheet_clientes
         }
     },
     "Cierre de Reclamos": {
