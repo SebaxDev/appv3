@@ -537,29 +537,46 @@ def render_planificacion_grupos(df_reclamos, sheet_reclamos, user, df_clientes=N
     st.subheader("📋 Asignación de reclamos a grupos de trabajo")
 
     try:
+        # 🔧 LIMPIEZA GLOBAL DE COLUMNAS CLAVE
+        columnas_a_limpiar = ["Estado", "ID Reclamo", "Sector", "Tipo de reclamo"]
+        for col in columnas_a_limpiar:
+            if col in df_reclamos.columns:
+                df_reclamos[col] = (
+                    df_reclamos[col]
+                    .astype(str)
+                    .replace(["<NA>", "nan", "None", "NaN"], "")
+                    .str.strip()
+                )
+
+        # 🧩 Inicialización del estado de grupos y técnicos
         inicializar_estado_grupos()
-        # Debounce: evitar ejecutar generación de IDs en cada render
+
+        # Evitar ejecutar generación de IDs en cada render
         if 'planif_ids_rellenados' not in st.session_state:
             st.session_state.planif_ids_rellenados = False
         if not st.session_state.planif_ids_rellenados:
             if _rellenar_ids_vacios(df_reclamos, sheet_reclamos):
                 st.session_state.planif_ids_rellenados = True
+
         _limpiar_asignaciones(df_reclamos)
 
+        # 🎚️ Selección de cantidad de grupos
         grupos_activos = st.slider("🔢 Cantidad de grupos de trabajo activos", 1, 5, 2)
 
+        # 📊 Modo de distribución
         modo_distribucion = st.selectbox(
             "📊 Elegí el modo de distribución",
             ["Manual", "Automática por sector (mejorada)", "Automática por tipo de reclamo"],
             index=0
         )
 
+        # ⚙️ Distribución automática
         if modo_distribucion != "Manual":
             if st.button("⚙️ Distribuir reclamos ahora"):
                 if modo_distribucion == "Automática por sector (mejorada)":
                     st.session_state.simulacion_asignaciones = distribuir_por_sector_mejorado(df_reclamos, grupos_activos)
 
-                    # Mostrar zonas asignadas por grupo con el algoritmo mejorado
+                    # Mostrar zonas asignadas por grupo
                     zonas_por_grupo = agrupar_zonas_completas(
                         list(SECTORES_VECINOS.keys()),
                         GRUPOS_POSIBLES[:grupos_activos],
@@ -575,6 +592,7 @@ def render_planificacion_grupos(df_reclamos, sheet_reclamos, user, df_clientes=N
                 st.session_state.vista_simulacion = True
                 st.success("✅ Distribución previa generada. Revisala antes de guardar.")
 
+        # 🗂️ Mostrar simulación previa
         if st.session_state.get("vista_simulacion"):
             st.subheader("🗂️ Distribución previa de reclamos")
             for grupo, reclamos in st.session_state.simulacion_asignaciones.items():
@@ -585,36 +603,42 @@ def render_planificacion_grupos(df_reclamos, sheet_reclamos, user, df_clientes=N
                         r = row.iloc[0]
                         st.markdown(f"- {r['Nº Cliente']} | {r['Tipo de reclamo']} | Sector {r['Sector']}")
 
-            # Solo opción de confirmar, sin generar PDF en la simulación
+            # Confirmar y guardar
             if st.button("💾 Confirmar y guardar esta asignación"):
                 for g in GRUPOS_POSIBLES:
                     st.session_state.asignaciones_grupos[g] = []
-                        
                 st.session_state.asignaciones_grupos = st.session_state.simulacion_asignaciones
                 st.session_state.vista_simulacion = False
                 st.success("✅ Asignaciones aplicadas.")
                 st.rerun()
 
+        # 🔄 Botón para refrescar reclamos
         if st.button("🔄 Refrescar reclamos"):
             st.cache_data.clear()
-            
-            # Generar UUIDs faltantes si se tienen los datos necesarios
+
+            # Verificar y generar UUIDs faltantes si se tienen datos
             if df_clientes is not None and sheet_clientes is not None:
                 with st.spinner("Verificando y generando UUIDs faltantes..."):
                     _generar_uuids_faltantes(df_reclamos, df_clientes, sheet_reclamos, sheet_clientes)
+
             # Permitir nueva ejecución de relleno tras refresh
             st.session_state.planif_ids_rellenados = False
-            
             return {'needs_refresh': True}
 
+        # 👷 Asignar técnicos
         _mostrar_asignacion_tecnicos(grupos_activos)
+
+        # 📋 Mostrar reclamos disponibles
         df_pendientes = _mostrar_reclamos_disponibles(df_reclamos, grupos_activos, sheet_reclamos)
 
         if df_pendientes is not None:
             materiales_por_grupo = _mostrar_reclamos_asignados(df_pendientes, grupos_activos)
             cambios = _mostrar_acciones_finales(
-                df_reclamos, sheet_reclamos, 
-                grupos_activos, materiales_por_grupo, df_pendientes
+                df_reclamos,
+                sheet_reclamos,
+                grupos_activos,
+                materiales_por_grupo,
+                df_pendientes
             )
             return {'needs_refresh': cambios}
 
