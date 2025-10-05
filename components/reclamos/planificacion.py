@@ -425,18 +425,20 @@ def _mostrar_reclamos_disponibles(df_reclamos, grupos_activos, sheet_reclamos):
     st.markdown("### 📋 Reclamos pendientes para asignar")
 
     df_reclamos.columns = df_reclamos.columns.str.strip()
-    df_reclamos["ID Reclamo"] = df_reclamos["ID Reclamo"].astype(str).str.strip()
     # Filtrar filas totalmente vacías (p. ej., restos al final de la hoja)
     df_filtrado = df_reclamos.replace('', pd.NA).dropna(how='all')
+    # Normalizar IDs a cadenas seguras para evitar NA ambiguo
+    id_norm = df_filtrado["ID Reclamo"].apply(lambda x: "" if pd.isna(x) else str(x).strip())
+    df_filtrado["ID Reclamo"] = id_norm
     df_filtrado["Fecha y hora"] = pd.to_datetime(df_filtrado["Fecha y hora"], dayfirst=True, errors='coerce')
 
     # Verificamos si hay IDs vacíos y, si es así, intentamos autocompletar una vez
-    if df_filtrado["ID Reclamo"].eq("").any():
+    if (df_filtrado["ID Reclamo"].eq("").to_numpy()).any():
         # Intentar completar automáticamente
         _rellenar_ids_vacios(df_filtrado, sheet_reclamos)
         # Normalizar nuevamente
-        df_filtrado["ID Reclamo"] = df_filtrado["ID Reclamo"].astype(str).str.strip()
-        if df_filtrado["ID Reclamo"].eq("").any():
+        df_filtrado["ID Reclamo"] = df_filtrado["ID Reclamo"].apply(lambda x: "" if pd.isna(x) else str(x).strip())
+        if (df_filtrado["ID Reclamo"].eq("").to_numpy()).any():
             st.error("❌ Hay reclamos con ID vacío. Por favor, corregílos en la hoja antes de continuar.")
             return None
 
