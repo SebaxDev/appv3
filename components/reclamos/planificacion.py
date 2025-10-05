@@ -419,21 +419,28 @@ def _mostrar_asignacion_tecnicos(grupos_activos):
         )
 
 
-def _mostrar_reclamos_disponibles(df_reclamos, grupos_activos):
+def _mostrar_reclamos_disponibles(df_reclamos, grupos_activos, sheet_reclamos):
     """Muestra reclamos disponibles para asignar"""
     st.markdown("---")
     st.markdown("### 📋 Reclamos pendientes para asignar")
 
     df_reclamos.columns = df_reclamos.columns.str.strip()
     df_reclamos["ID Reclamo"] = df_reclamos["ID Reclamo"].astype(str).str.strip()
-    df_reclamos["Fecha y hora"] = pd.to_datetime(df_reclamos["Fecha y hora"], dayfirst=True, errors='coerce')
+    # Filtrar filas totalmente vacías (p. ej., restos al final de la hoja)
+    df_filtrado = df_reclamos.replace('', pd.NA).dropna(how='all')
+    df_filtrado["Fecha y hora"] = pd.to_datetime(df_filtrado["Fecha y hora"], dayfirst=True, errors='coerce')
 
-    # Verificamos si hay IDs vacíos
-    if df_reclamos["ID Reclamo"].eq("").any():
-        st.error("❌ Hay reclamos con ID vacío. Por favor, corregílos en la hoja antes de continuar.")
-        return None
+    # Verificamos si hay IDs vacíos y, si es así, intentamos autocompletar una vez
+    if df_filtrado["ID Reclamo"].eq("").any():
+        # Intentar completar automáticamente
+        _rellenar_ids_vacios(df_filtrado, sheet_reclamos)
+        # Normalizar nuevamente
+        df_filtrado["ID Reclamo"] = df_filtrado["ID Reclamo"].astype(str).str.strip()
+        if df_filtrado["ID Reclamo"].eq("").any():
+            st.error("❌ Hay reclamos con ID vacío. Por favor, corregílos en la hoja antes de continuar.")
+            return None
 
-    df_pendientes = df_reclamos[df_reclamos["Estado"] == "Pendiente"].copy()
+    df_pendientes = df_filtrado[df_filtrado["Estado"] == "Pendiente"].copy()
 
     # Filtros
     col1, col2 = st.columns(2)
@@ -594,7 +601,7 @@ def render_planificacion_grupos(df_reclamos, sheet_reclamos, user, df_clientes=N
             return {'needs_refresh': True}
 
         _mostrar_asignacion_tecnicos(grupos_activos)
-        df_pendientes = _mostrar_reclamos_disponibles(df_reclamos, grupos_activos)
+        df_pendientes = _mostrar_reclamos_disponibles(df_reclamos, grupos_activos, sheet_reclamos)
 
         if df_pendientes is not None:
             materiales_por_grupo = _mostrar_reclamos_asignados(df_pendientes, grupos_activos)
