@@ -524,8 +524,12 @@ def render_planificacion_grupos(df_reclamos, sheet_reclamos, user, df_clientes=N
 
     try:
         inicializar_estado_grupos()
-        # Autocompletar IDs vacíos antes de cualquier validación
-        _rellenar_ids_vacios(df_reclamos, sheet_reclamos)
+        # Debounce: evitar ejecutar generación de IDs en cada render
+        if 'planif_ids_rellenados' not in st.session_state:
+            st.session_state.planif_ids_rellenados = False
+        if not st.session_state.planif_ids_rellenados:
+            if _rellenar_ids_vacios(df_reclamos, sheet_reclamos):
+                st.session_state.planif_ids_rellenados = True
         _limpiar_asignaciones(df_reclamos)
 
         grupos_activos = st.slider("🔢 Cantidad de grupos de trabajo activos", 1, 5, 2)
@@ -584,6 +588,8 @@ def render_planificacion_grupos(df_reclamos, sheet_reclamos, user, df_clientes=N
             if df_clientes is not None and sheet_clientes is not None:
                 with st.spinner("Verificando y generando UUIDs faltantes..."):
                     _generar_uuids_faltantes(df_reclamos, df_clientes, sheet_reclamos, sheet_clientes)
+            # Permitir nueva ejecución de relleno tras refresh
+            st.session_state.planif_ids_rellenados = False
             
             return {'needs_refresh': True}
 
