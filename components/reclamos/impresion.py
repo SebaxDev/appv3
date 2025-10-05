@@ -10,6 +10,7 @@ from utils.date_utils import format_fecha, parse_fecha
 from utils.pdf_utils import agregar_pie_pdf
 from utils.date_utils import ahora_argentina
 from utils.reporte_diario import *
+from config.settings import DEBUG_MODE
 
 
 def render_impresion_reclamos(df_reclamos, df_clientes, user):
@@ -453,3 +454,121 @@ def _generar_pdf_en_curso_por_tecnico(df_merged, usuario=None):
         return "PDF generado con reclamos en curso por técnico"
 
     return None
+
+# ==============================
+# Utilidad central para crear PDF
+# ==============================
+def _crear_pdf_reclamos(df, titulo, usuario=None):
+    """Crea un PDF compacto con filas del DataFrame `df`.
+
+    Columnas esperadas en `df` (no estrictas, se ignoran si faltan):
+    - "Fecha y hora" (datetime o str)
+    - "Nº Cliente"
+    - "Nombre"
+    - "Dirección"
+    - "Sector"
+    - "Tipo de reclamo"
+    - "Detalles"
+    - "Técnico"
+    - "N° de Precinto"
+    """
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+
+    # Márgenes y medidas
+    margen_izq = 40
+    margen_der = 40
+    y = height - 40
+
+    hoy = ahora_argentina().strftime('%d/%m/%Y')
+
+    def iniciar_pagina():
+        nonlocal y
+        c.setFont("Helvetica-Bold", 15)
+        c.drawString(margen_izq, y, titulo)
+        c.setFont("Helvetica", 10)
+        c.drawString(width - 150, y, f"Fecha: {hoy}")
+        if usuario:
+            c.drawString(width - 150, y - 12, f"Por: {usuario.get('nombre', 'Sistema')}")
+        y -= 28
+
+        # Encabezados de columnas
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(margen_izq, y, "Cliente")
+        c.drawString(margen_izq + 90, y, "Nombre")
+        c.drawString(margen_izq + 260, y, "Dirección")
+        c.drawString(margen_izq + 430, y, "Sector")
+        c.drawString(margen_izq + 480, y, "Tipo")
+        y -= 14
+        c.setFont("Helvetica", 10)
+
+    def salto_pagina_si_necesario(min_y=60):
+        nonlocal y
+        if y < min_y:
+            agregar_pie_pdf(c, width, height)
+            c.showPage()
+            y = height - 40
+            iniciar_pagina()
+
+    iniciar_pagina()
+
+    # Normalizar columnas existentes
+    columnas = df.columns
+
+    for _, row in df.iterrows():
+        salto_pagina_si_necesario()
+
+        # Fecha formateada si existe
+        fecha_val = row.get("Fecha y hora") if "Fecha y hora" in columnas else None
+        try:
+            if pd.notna(fecha_val):
+                if not isinstance(fecha_val, pd.Timestamp):
+                    fecha_val = pd.to_datetime(fecha_val, dayfirst=True, errors='coerce')
+        except Exception:
+            fecha_val = None
+        fecha_txt = format_fecha(fecha_val, '%d/%m %H:%M') if pd.notna(fecha_val) else ""
+
+        num_cliente = str(row.get("Nº Cliente", "")).strip()
+        nombre = str(row.get("Nombre", "")).strip()
+        direccion = str(row.get("Dirección", "")).strip()
+        sector = str(row.get("Sector", "")).strip()
+        tipo = str(row.get("Tipo de reclamo", "")).strip()
+        detalles = str(row.get("Detalles", "")).strip()
+        tecnico = str(row.get("Técnico", "")).strip()
+        precinto = str(row.get("N° de Precinto", row.get("N° de Precinto", ""))).strip()
+
+        # Línea principal compacta
+        linea_cliente = f"{fecha_txt} {num_cliente}"
+        c.drawString(margen_izq, y, linea_cliente[:18])
+        c.drawString(margen_izq + 90, y, nombre[:22])
+        c.drawString(margen_izq + 260, y, direccion[:28])
+        c.drawString(margen_izq + 430, y, sector[:6])
+        c.drawString(margen_izq + 480, y, tipo[:18])
+        y -= 12
+
+        # Segunda línea con más info si hay
+        extra = []
+        if detalles:
+            extra.append(detalles)
+        if tecnico:
+            extra.append(f"Tec: {tecnico}")
+        if precinto:
+            extra.append(f"Prec: {precinto}")
+        if extra:
+            salto_pagina_si_necesario()
+            c.setFont("Helvetica", 9)
+            c.drawString(margen_izq + 20, y, " | ".join(extra)[:95])
+            c.setFont("Helvetica", 10)
+            y -= 10
+
+        # Separador suave
+        c.setFont("Helvetica", 8)
+        c.drawString(margen_izq, y, "-" * 105)
+        c.setFont("Helvetica", 10)
+        y -= 8
+
+    agregar_pie_pdf(c, width, height)
+    c.save()
+    buffer.seek(0)
+    return buffer
