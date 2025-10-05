@@ -14,8 +14,7 @@ from config.settings import (
     TECNICOS_DISPONIBLES,
     MATERIALES_POR_RECLAMO,
     ROUTER_POR_SECTOR,
-    DEBUG_MODE,
-    COLUMNAS_RECLAMOS
+    DEBUG_MODE
 )
 import uuid
 
@@ -24,42 +23,6 @@ GRUPOS_POSIBLES = [f"Grupo {letra}" for letra in "ABCDE"]
 def generar_id_unico():
     """Genera un ID único para reclamos y clientes"""
     return str(uuid.uuid4())[:8].upper()
-
-def _rellenar_ids_vacios(df_reclamos, sheet_reclamos):
-    """Asegura que no haya IDs vacíos: genera y escribe en columna O y actualiza el DataFrame."""
-    try:
-        if "ID Reclamo" not in df_reclamos.columns:
-            return False
-
-        # ✅ Limpiar valores NA correctamente antes de comparar
-        ids_str = df_reclamos["ID Reclamo"].astype(str).replace(["<NA>", "nan", "None", "NaN"], "").str.strip()
-
-        # ✅ Ahora la comparación no genera ambigüedad
-        vacios_mask = ids_str.eq("") | df_reclamos["ID Reclamo"].isna()
-
-        if not vacios_mask.any():
-            return False
-
-        updates = []
-        for idx in df_reclamos.index[vacios_mask]:
-            nuevo_id = generar_id_unico()
-            updates.append({"range": f"O{idx + 2}", "values": [[nuevo_id]]})
-            df_reclamos.at[idx, "ID Reclamo"] = nuevo_id
-
-        if updates:
-            success, error = api_manager.safe_sheet_operation(
-                batch_update_sheet, sheet_reclamos, updates, is_batch=True
-            )
-            if not success:
-                st.warning(f"No se pudieron guardar algunos IDs: {error}")
-        return True
-
-    except Exception as e:
-        if 'DEBUG_MODE' in globals() and DEBUG_MODE:
-            st.exception(e)
-        st.error(f"❌ Error al completar IDs vacíos: {e}")
-        return False
-
 
 def _generar_uuids_faltantes(df_reclamos, df_clientes, sheet_reclamos, sheet_clientes):
     """
@@ -80,11 +43,10 @@ def _generar_uuids_faltantes(df_reclamos, df_clientes, sheet_reclamos, sheet_cli
             ]
             
             if not reclamos_sin_uuid.empty:
-                # Escribir explícitamente en la columna O (ID Reclamo)
                 for _, row in reclamos_sin_uuid.iterrows():
                     nuevo_uuid = generar_id_unico()
                     updates_reclamos.append({
-                        "range": f"O{row.name + 2}",
+                        "range": f"P{row.name + 2}",  # Columna P es ID Reclamo
                         "values": [[nuevo_uuid]]
                     })
         
@@ -424,30 +386,21 @@ def _mostrar_asignacion_tecnicos(grupos_activos):
         )
 
 
-def _mostrar_reclamos_disponibles(df_reclamos, grupos_activos, sheet_reclamos):
+def _mostrar_reclamos_disponibles(df_reclamos, grupos_activos):
     """Muestra reclamos disponibles para asignar"""
     st.markdown("---")
     st.markdown("### 📋 Reclamos pendientes para asignar")
 
     df_reclamos.columns = df_reclamos.columns.str.strip()
-    # Filtrar filas totalmente vacías (p. ej., restos al final de la hoja)
-    df_filtrado = df_reclamos.replace('', pd.NA).dropna(how='all')
-    # Normalizar IDs a cadenas seguras para evitar NA ambiguo
-    id_norm = df_filtrado["ID Reclamo"].apply(lambda x: "" if pd.isna(x) else str(x).strip())
-    df_filtrado["ID Reclamo"] = id_norm
-    df_filtrado["Fecha y hora"] = pd.to_datetime(df_filtrado["Fecha y hora"], dayfirst=True, errors='coerce')
+    df_reclamos["ID Reclamo"] = df_reclamos["ID Reclamo"].astype(str).str.strip()
+    df_reclamos["Fecha y hora"] = pd.to_datetime(df_reclamos["Fecha y hora"], dayfirst=True, errors='coerce')
 
-    # Verificamos si hay IDs vacíos y, si es así, intentamos autocompletar una vez
-    if (df_filtrado["ID Reclamo"].eq("").to_numpy()).any():
-        # Intentar completar automáticamente
-        _rellenar_ids_vacios(df_filtrado, sheet_reclamos)
-        # Normalizar nuevamente
-        df_filtrado["ID Reclamo"] = df_filtrado["ID Reclamo"].apply(lambda x: "" if pd.isna(x) else str(x).strip())
-        if (df_filtrado["ID Reclamo"].eq("").to_numpy()).any():
-            st.error("❌ Hay reclamos con ID vacío. Por favor, corregílos en la hoja antes de continuar.")
-            return None
+    # Verificamos si hay IDs vacíos
+    if df_reclamos["ID Reclamo"].eq("").any():
+        st.error("❌ Hay reclamos con ID vacío. Por favor, corregílos en la hoja antes de continuar.")
+        return None
 
-    df_pendientes = df_filtrado[df_filtrado["Estado"] == "Pendiente"].copy()
+    df_pendientes = df_reclamos[df_reclamos["Estado"] == "Pendiente"].copy()
 
     # Filtros
     col1, col2 = st.columns(2)
@@ -537,46 +490,23 @@ def render_planificacion_grupos(df_reclamos, sheet_reclamos, user, df_clientes=N
     st.subheader("📋 Asignación de reclamos a grupos de trabajo")
 
     try:
-        # 🔧 LIMPIEZA GLOBAL DE COLUMNAS CLAVE
-        columnas_a_limpiar = ["Estado", "ID Reclamo", "Sector", "Tipo de reclamo"]
-        for col in columnas_a_limpiar:
-            if col in df_reclamos.columns:
-                df_reclamos[col] = (
-                    df_reclamos[col]
-                    .astype(str)
-                    .replace(["<NA>", "nan", "None", "NaN"], "")
-                    .str.strip()
-                )
-
-        # 🧩 Inicialización del estado de grupos y técnicos
         inicializar_estado_grupos()
-
-        # Evitar ejecutar generación de IDs en cada render
-        if 'planif_ids_rellenados' not in st.session_state:
-            st.session_state.planif_ids_rellenados = False
-        if not st.session_state.planif_ids_rellenados:
-            if _rellenar_ids_vacios(df_reclamos, sheet_reclamos):
-                st.session_state.planif_ids_rellenados = True
-
         _limpiar_asignaciones(df_reclamos)
 
-        # 🎚️ Selección de cantidad de grupos
         grupos_activos = st.slider("🔢 Cantidad de grupos de trabajo activos", 1, 5, 2)
 
-        # 📊 Modo de distribución
         modo_distribucion = st.selectbox(
             "📊 Elegí el modo de distribución",
             ["Manual", "Automática por sector (mejorada)", "Automática por tipo de reclamo"],
             index=0
         )
 
-        # ⚙️ Distribución automática
         if modo_distribucion != "Manual":
             if st.button("⚙️ Distribuir reclamos ahora"):
                 if modo_distribucion == "Automática por sector (mejorada)":
                     st.session_state.simulacion_asignaciones = distribuir_por_sector_mejorado(df_reclamos, grupos_activos)
 
-                    # Mostrar zonas asignadas por grupo
+                    # Mostrar zonas asignadas por grupo con el algoritmo mejorado
                     zonas_por_grupo = agrupar_zonas_completas(
                         list(SECTORES_VECINOS.keys()),
                         GRUPOS_POSIBLES[:grupos_activos],
@@ -592,7 +522,6 @@ def render_planificacion_grupos(df_reclamos, sheet_reclamos, user, df_clientes=N
                 st.session_state.vista_simulacion = True
                 st.success("✅ Distribución previa generada. Revisala antes de guardar.")
 
-        # 🗂️ Mostrar simulación previa
         if st.session_state.get("vista_simulacion"):
             st.subheader("🗂️ Distribución previa de reclamos")
             for grupo, reclamos in st.session_state.simulacion_asignaciones.items():
@@ -603,42 +532,34 @@ def render_planificacion_grupos(df_reclamos, sheet_reclamos, user, df_clientes=N
                         r = row.iloc[0]
                         st.markdown(f"- {r['Nº Cliente']} | {r['Tipo de reclamo']} | Sector {r['Sector']}")
 
-            # Confirmar y guardar
+            # Solo opción de confirmar, sin generar PDF en la simulación
             if st.button("💾 Confirmar y guardar esta asignación"):
                 for g in GRUPOS_POSIBLES:
                     st.session_state.asignaciones_grupos[g] = []
+                        
                 st.session_state.asignaciones_grupos = st.session_state.simulacion_asignaciones
                 st.session_state.vista_simulacion = False
                 st.success("✅ Asignaciones aplicadas.")
                 st.rerun()
 
-        # 🔄 Botón para refrescar reclamos
         if st.button("🔄 Refrescar reclamos"):
             st.cache_data.clear()
-
-            # Verificar y generar UUIDs faltantes si se tienen datos
+            
+            # Generar UUIDs faltantes si se tienen los datos necesarios
             if df_clientes is not None and sheet_clientes is not None:
                 with st.spinner("Verificando y generando UUIDs faltantes..."):
                     _generar_uuids_faltantes(df_reclamos, df_clientes, sheet_reclamos, sheet_clientes)
-
-            # Permitir nueva ejecución de relleno tras refresh
-            st.session_state.planif_ids_rellenados = False
+            
             return {'needs_refresh': True}
 
-        # 👷 Asignar técnicos
         _mostrar_asignacion_tecnicos(grupos_activos)
-
-        # 📋 Mostrar reclamos disponibles
-        df_pendientes = _mostrar_reclamos_disponibles(df_reclamos, grupos_activos, sheet_reclamos)
+        df_pendientes = _mostrar_reclamos_disponibles(df_reclamos, grupos_activos)
 
         if df_pendientes is not None:
             materiales_por_grupo = _mostrar_reclamos_asignados(df_pendientes, grupos_activos)
             cambios = _mostrar_acciones_finales(
-                df_reclamos,
-                sheet_reclamos,
-                grupos_activos,
-                materiales_por_grupo,
-                df_pendientes
+                df_reclamos, sheet_reclamos, 
+                grupos_activos, materiales_por_grupo, df_pendientes
             )
             return {'needs_refresh': cambios}
 
