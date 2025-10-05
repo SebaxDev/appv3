@@ -31,9 +31,11 @@ def _rellenar_ids_vacios(df_reclamos, sheet_reclamos):
         if "ID Reclamo" not in df_reclamos.columns:
             return False
 
-        # Normalizar y detectar vacíos reales tras strip
-        ids_str = df_reclamos["ID Reclamo"].astype(str).str.strip()
-        vacios_mask = ids_str.eq("") | ids_str.isna() | ids_str.str.lower().isin(["nan", "none"])
+        # ✅ Limpiar valores NA correctamente antes de comparar
+        ids_str = df_reclamos["ID Reclamo"].astype(str).replace(["<NA>", "nan", "None", "NaN"], "").str.strip()
+
+        # ✅ Ahora la comparación no genera ambigüedad
+        vacios_mask = ids_str.eq("") | df_reclamos["ID Reclamo"].isna()
 
         if not vacios_mask.any():
             return False
@@ -51,10 +53,13 @@ def _rellenar_ids_vacios(df_reclamos, sheet_reclamos):
             if not success:
                 st.warning(f"No se pudieron guardar algunos IDs: {error}")
         return True
+
     except Exception as e:
         if 'DEBUG_MODE' in globals() and DEBUG_MODE:
             st.exception(e)
+        st.error(f"❌ Error al completar IDs vacíos: {e}")
         return False
+
 
 def _generar_uuids_faltantes(df_reclamos, df_clientes, sheet_reclamos, sheet_clientes):
     """
