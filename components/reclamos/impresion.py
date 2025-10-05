@@ -459,53 +459,56 @@ def _generar_pdf_en_curso_por_tecnico(df_merged, usuario=None):
 # Utilidad central para crear PDF
 # ==============================
 def _crear_pdf_reclamos(df, titulo, usuario=None):
-    """Crea un PDF compacto con filas del DataFrame `df`.
+    """Crea un PDF con el mismo estilo de impresión que planificación.
 
-    Columnas esperadas en `df` (no estrictas, se ignoran si faltan):
-    - "Fecha y hora" (datetime o str)
-    - "Nº Cliente"
-    - "Nombre"
-    - "Dirección"
-    - "Sector"
-    - "Tipo de reclamo"
-    - "Detalles"
-    - "Técnico"
-    - "N° de Precinto"
+    Para cada reclamo imprime un bloque:
+    - Título de cliente en negrita: "Nº Cliente - Nombre (Sector)"
+    - Líneas: Fecha, Dirección, Tel/Precinto, Tipo, Detalles (con wrap)
+    - Separador y manejo de salto de página
     """
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
 
-    # Márgenes y medidas
     margen_izq = 40
     margen_der = 40
     y = height - 40
-
     hoy = ahora_argentina().strftime('%d/%m/%Y')
+
+    max_line_width = width - margen_izq - margen_der
+
+    def wrap_text(texto, fuente="Helvetica", tam=11):
+        """Envuelve `texto` para que quepa en el ancho disponible."""
+        if not texto:
+            return []
+        palabras = str(texto).split()
+        lineas = []
+        actual = ""
+        for p in palabras:
+            candidata = (actual + (" " if actual else "") + p)
+            if c.stringWidth(candidata, fuente, tam) <= max_line_width:
+                actual = candidata
+            else:
+                if actual:
+                    lineas.append(actual)
+                actual = p
+        if actual:
+            lineas.append(actual)
+        return lineas
 
     def iniciar_pagina():
         nonlocal y
-        c.setFont("Helvetica-Bold", 15)
+        c.setFont("Helvetica-Bold", 16)
         c.drawString(margen_izq, y, titulo)
         c.setFont("Helvetica", 10)
-        c.drawString(width - 150, y, f"Fecha: {hoy}")
+        c.drawString(width - 160, y, f"Fecha: {hoy}")
         if usuario:
-            c.drawString(width - 150, y - 12, f"Por: {usuario.get('nombre', 'Sistema')}")
-        y -= 28
+            c.drawString(width - 160, y - 12, f"Por: {usuario.get('nombre', 'Sistema')}")
+        y -= 30
 
-        # Encabezados de columnas
-        c.setFont("Helvetica-Bold", 10)
-        c.drawString(margen_izq, y, "Cliente")
-        c.drawString(margen_izq + 90, y, "Nombre")
-        c.drawString(margen_izq + 260, y, "Dirección")
-        c.drawString(margen_izq + 430, y, "Sector")
-        c.drawString(margen_izq + 480, y, "Tipo")
-        y -= 14
-        c.setFont("Helvetica", 10)
-
-    def salto_pagina_si_necesario(min_y=60):
+    def salto_pagina_si_necesario(altura_necesaria=80):
         nonlocal y
-        if y < min_y:
+        if y < altura_necesaria:
             agregar_pie_pdf(c, width, height)
             c.showPage()
             y = height - 40
@@ -513,60 +516,67 @@ def _crear_pdf_reclamos(df, titulo, usuario=None):
 
     iniciar_pagina()
 
-    # Normalizar columnas existentes
     columnas = df.columns
 
     for _, row in df.iterrows():
-        salto_pagina_si_necesario()
-
-        # Fecha formateada si existe
-        fecha_val = row.get("Fecha y hora") if "Fecha y hora" in columnas else None
-        try:
-            if pd.notna(fecha_val):
-                if not isinstance(fecha_val, pd.Timestamp):
-                    fecha_val = pd.to_datetime(fecha_val, dayfirst=True, errors='coerce')
-        except Exception:
-            fecha_val = None
-        fecha_txt = format_fecha(fecha_val, '%d/%m %H:%M') if pd.notna(fecha_val) else ""
-
+        # Normalizar/leer campos
         num_cliente = str(row.get("Nº Cliente", "")).strip()
         nombre = str(row.get("Nombre", "")).strip()
-        direccion = str(row.get("Dirección", "")).strip()
         sector = str(row.get("Sector", "")).strip()
-        tipo = str(row.get("Tipo de reclamo", "")).strip()
+        direccion = str(row.get("Dirección", "")).strip()
+        telefono = str(row.get("Teléfono", "")).strip() if "Teléfono" in columnas else ""
         detalles = str(row.get("Detalles", "")).strip()
+        tipo = str(row.get("Tipo de reclamo", "")).strip()
         tecnico = str(row.get("Técnico", "")).strip()
-        precinto = str(row.get("N° de Precinto", row.get("N° de Precinto", ""))).strip()
+        precinto = str(row.get("N° de Precinto", "")).strip()
 
-        # Línea principal compacta
-        linea_cliente = f"{fecha_txt} {num_cliente}"
-        c.drawString(margen_izq, y, linea_cliente[:18])
-        c.drawString(margen_izq + 90, y, nombre[:22])
-        c.drawString(margen_izq + 260, y, direccion[:28])
-        c.drawString(margen_izq + 430, y, sector[:6])
-        c.drawString(margen_izq + 480, y, tipo[:18])
-        y -= 12
+        # Fecha
+        fecha_val = row.get("Fecha y hora") if "Fecha y hora" in columnas else None
+        try:
+            if pd.notna(fecha_val) and not isinstance(fecha_val, pd.Timestamp):
+                fecha_val = pd.to_datetime(fecha_val, dayfirst=True, errors='coerce')
+        except Exception:
+            fecha_val = None
+        fecha_pdf = format_fecha(fecha_val, '%d/%m/%Y %H:%M') if pd.notna(fecha_val) else 'Sin fecha'
 
-        # Segunda línea con más info si hay
-        extra = []
+        # Altura estimada del bloque (simple): 5 líneas base + detalles envueltos
+        detalles_lineas = wrap_text(detalles, tam=11)
+        altura_bloque = 15 + 12*4 + 12*max(1, len(detalles_lineas)) + 20
+        salto_pagina_si_necesario(altura_bloque)
+
+        # Encabezado del reclamo
+        c.setFont("Helvetica-Bold", 14)
+        nombre_linea = f"{num_cliente} - {nombre} ({sector})"
+        for l in wrap_text(nombre_linea, fuente="Helvetica-Bold", tam=14):
+            c.drawString(margen_izq, y, l)
+            y -= 15
+
+        # Líneas de contenido
+        c.setFont("Helvetica", 11)
+        for linea in [
+            f"Fecha: {fecha_pdf}",
+            f"Dirección: {direccion}",
+            f"Tel: {telefono} - Precinto: {precinto}".strip(" - "),
+            f"Tipo: {tipo}" + (f" - Tec: {tecnico}" if tecnico else ""),
+        ]:
+            for l in wrap_text(linea, tam=11):
+                c.drawString(margen_izq, y, l)
+                y -= 12
+
+        # Detalles (pueden ocupar varias líneas)
         if detalles:
-            extra.append(detalles)
-        if tecnico:
-            extra.append(f"Tec: {tecnico}")
-        if precinto:
-            extra.append(f"Prec: {precinto}")
-        if extra:
-            salto_pagina_si_necesario()
-            c.setFont("Helvetica", 9)
-            c.drawString(margen_izq + 20, y, " | ".join(extra)[:95])
-            c.setFont("Helvetica", 10)
-            y -= 10
+            c.setFont("Helvetica", 11)
+            for l in detalles_lineas:
+                c.drawString(margen_izq, y, f"Detalles: {l}" if l == detalles_lineas[0] else l)
+                y -= 12
+        else:
+            c.drawString(margen_izq, y, "Detalles: ")
+            y -= 12
 
-        # Separador suave
-        c.setFont("Helvetica", 8)
-        c.drawString(margen_izq, y, "-" * 105)
-        c.setFont("Helvetica", 10)
-        y -= 8
+        # Separador
+        y -= 6
+        c.line(margen_izq, y, width - margen_der, y)
+        y -= 15
 
     agregar_pie_pdf(c, width, height)
     c.save()
