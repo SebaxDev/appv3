@@ -113,10 +113,21 @@ def migrar_uuids_existentes(sheet_reclamos, sheet_clientes):
             with st.status("Generando UUIDs para reclamos...", expanded=True) as status:
                 st.write(f"📋 {len(reclamos_sin_uuid)} reclamos sin UUID encontrados")
 
+                # Calcular letra de columna para "ID Reclamo" dinámicamente
+                def _excel_col_letter(n: int) -> str:
+                    letters = ""
+                    while n:
+                        n, rem = divmod(n - 1, 26)
+                        letters = chr(65 + rem) + letters
+                    return letters
+
+                idx_id_reclamo = COLUMNAS_RECLAMOS.index("ID Reclamo") + 1
+                col_id_letter = _excel_col_letter(idx_id_reclamo)
+
                 for _, row in reclamos_sin_uuid.iterrows():
                     nuevo_uuid = generar_id_unico()
                     updates_reclamos.append({
-                        "range": f"P{row.name + 2}",
+                        "range": f"{col_id_letter}{row.name + 2}",
                         "values": [[nuevo_uuid]]
                     })
 

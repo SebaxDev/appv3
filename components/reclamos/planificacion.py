@@ -14,7 +14,8 @@ from config.settings import (
     TECNICOS_DISPONIBLES,
     MATERIALES_POR_RECLAMO,
     ROUTER_POR_SECTOR,
-    DEBUG_MODE
+    DEBUG_MODE,
+    COLUMNAS_RECLAMOS
 )
 import uuid
 
@@ -43,10 +44,22 @@ def _generar_uuids_faltantes(df_reclamos, df_clientes, sheet_reclamos, sheet_cli
             ]
             
             if not reclamos_sin_uuid.empty:
+                # Calcular letra de columna para "ID Reclamo" dinámicamente
+                idx_col = COLUMNAS_RECLAMOS.index("ID Reclamo") + 1
+                # Conversión a letra Excel
+                def _excel_col_letter(n: int) -> str:
+                    letters = ""
+                    while n:
+                        n, rem = divmod(n - 1, 26)
+                        letters = chr(65 + rem) + letters
+                    return letters
+
+                col_id_letter = _excel_col_letter(idx_col)
+
                 for _, row in reclamos_sin_uuid.iterrows():
                     nuevo_uuid = generar_id_unico()
                     updates_reclamos.append({
-                        "range": f"P{row.name + 2}",  # Columna P es ID Reclamo
+                        "range": f"{col_id_letter}{row.name + 2}",
                         "values": [[nuevo_uuid]]
                     })
         
