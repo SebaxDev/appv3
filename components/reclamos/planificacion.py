@@ -25,6 +25,37 @@ def generar_id_unico():
     """Genera un ID único para reclamos y clientes"""
     return str(uuid.uuid4())[:8].upper()
 
+def _rellenar_ids_vacios(df_reclamos, sheet_reclamos):
+    """Asegura que no haya IDs vacíos: genera y escribe en columna O y actualiza el DataFrame."""
+    try:
+        if "ID Reclamo" not in df_reclamos.columns:
+            return False
+
+        # Normalizar y detectar vacíos reales tras strip
+        ids_str = df_reclamos["ID Reclamo"].astype(str).str.strip()
+        vacios_mask = ids_str.eq("") | ids_str.isna() | ids_str.str.lower().isin(["nan", "none"])
+
+        if not vacios_mask.any():
+            return False
+
+        updates = []
+        for idx in df_reclamos.index[vacios_mask]:
+            nuevo_id = generar_id_unico()
+            updates.append({"range": f"O{idx + 2}", "values": [[nuevo_id]]})
+            df_reclamos.at[idx, "ID Reclamo"] = nuevo_id
+
+        if updates:
+            success, error = api_manager.safe_sheet_operation(
+                batch_update_sheet, sheet_reclamos, updates, is_batch=True
+            )
+            if not success:
+                st.warning(f"No se pudieron guardar algunos IDs: {error}")
+        return True
+    except Exception as e:
+        if 'DEBUG_MODE' in globals() and DEBUG_MODE:
+            st.exception(e)
+        return False
+
 def _generar_uuids_faltantes(df_reclamos, df_clientes, sheet_reclamos, sheet_clientes):
     """
     Genera UUIDs para reclamos y clientes que no los tengan.
@@ -493,6 +524,8 @@ def render_planificacion_grupos(df_reclamos, sheet_reclamos, user, df_clientes=N
 
     try:
         inicializar_estado_grupos()
+        # Autocompletar IDs vacíos antes de cualquier validación
+        _rellenar_ids_vacios(df_reclamos, sheet_reclamos)
         _limpiar_asignaciones(df_reclamos)
 
         grupos_activos = st.slider("🔢 Cantidad de grupos de trabajo activos", 1, 5, 2)
