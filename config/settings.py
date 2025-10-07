@@ -106,7 +106,7 @@ TECNICOS_DISPONIBLES = [
 TIPOS_RECLAMO = [
     "Conexion C+I", "Conexion Cable", "Conexion Internet", "Suma Internet",
     "Suma Cable", "Reconexion", "Reconexion C+I", "Reconexion Internet", "Reconexion Cable", "Sin Señal Ambos", "Sin Señal Cable",
-    "Sin Señal Internet", "Sintonia", "Interferencia", "Traslado",
+    "Sin Señal Internet", "Sintonia", "Colocar HD", "Interferencia", "Traslado",
     "Extension", "Extension x2", "Extension x3", "Extension x4", "Cambio de Ficha",
     "Cambio de Equipo", "Reclamo", "Cambio de Plan", "Desconexion a Pedido"
 ]
@@ -151,6 +151,7 @@ MATERIALES_POR_RECLAMO = {
     "Sin Señal Cable": {"ficha_f": 2, "micro": 1},
     "Sin Señal Internet": {"conector": 1},
     "Sintonia": {},
+    "Colocar HD": {},
     "Interferencia": {"ficha_f": 2},
     "Traslado": {"conector": 2, "ficha_f": 2},
     "Extension": {},
