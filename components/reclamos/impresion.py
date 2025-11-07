@@ -120,6 +120,25 @@ def render_impresion_reclamos(df_reclamos, df_clientes, user):
 
     return result
 
+        # === NUEVA FILA: Resumen Mensual ===
+        st.markdown("---")
+        st.markdown("### 🗓️ Resumen Mensual de Reclamos Resueltos")
+        col7, col8 = st.columns(2)
+
+        with col7:
+            st.markdown("#### 📅 Resumen Mensual (PDF)")
+            if st.button("📄 Generar Resumen Mensual", use_container_width=True):
+                buffer = _generar_pdf_resumen_mensual(df_reclamos, user if incluir_usuario else None)
+                fecha_hoy = ahora_argentina().strftime("%Y-%m-%d")
+
+                st.download_button(
+                    label="⬇️ Descargar PDF",
+                    data=buffer,
+                    file_name=f"resumen_mensual_{fecha_hoy}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+
 def _preparar_datos(df_reclamos, df_clientes, user):
     """Prepara y combina los datos para impresión incluyendo info de usuario"""
     df_pdf = df_reclamos.copy()
@@ -458,6 +477,107 @@ def _generar_pdf_en_curso_por_tecnico(df_merged, usuario=None):
 # ==============================
 # Utilidad central para crear PDF
 # ==============================
+def _generar_pdf_resumen_mensual(df_reclamos, usuario=None):
+    """Genera un PDF con el resumen mensual de reclamos resueltos (últimos 30 días)."""
+    import io
+    from datetime import datetime, timedelta
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import A4
+
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+
+    margen_izq = 50
+    y = height - 50
+    hoy = ahora_argentina()
+    hace_30_dias = hoy - timedelta(days=30)
+
+    # Filtrar solo los reclamos resueltos en los últimos 30 días
+    df = df_reclamos.copy()
+    df["Fecha y hora"] = pd.to_datetime(df["Fecha y hora"], dayfirst=True, errors='coerce')
+    df_filtrado = df[
+        (df["Estado"].astype(str).str.strip().str.lower() == "resuelto") &
+        (df["Fecha y hora"].dt.date >= hace_30_dias.date())
+    ]
+
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(margen_izq, y, "📅 RESUMEN MENSUAL DE RECLAMOS RESUELTOS")
+    y -= 20
+    c.setFont("Helvetica", 10)
+    c.drawString(margen_izq, y, f"Período: {hace_30_dias.strftime('%d/%m/%Y')} - {hoy.strftime('%d/%m/%Y')}")
+    if usuario:
+        c.drawString(width - 200, y, f"Por: {usuario.get('nombre', 'Sistema')}")
+    y -= 30
+
+    if df_filtrado.empty:
+        c.setFont("Helvetica", 12)
+        c.drawString(margen_izq, y, "No se encontraron reclamos resueltos en los últimos 30 días.")
+        agregar_pie_pdf(c, width, height)
+        c.save()
+        buffer.seek(0)
+        return buffer
+
+    # --- Sección 1: Totales por tipo de reclamo ---
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(margen_izq, y, "📊 Reclamos resueltos por tipo:")
+    y -= 20
+
+    totales_tipo = (
+        df_filtrado["Tipo de reclamo"].fillna("Sin tipo")
+        .str.strip()
+        .value_counts()
+        .sort_index()
+    )
+
+    c.setFont("Helvetica", 12)
+    for tipo, cantidad in totales_tipo.items():
+        c.drawString(margen_izq + 20, y, f"- {tipo}: {cantidad}")
+        y -= 15
+        if y < 60:
+            agregar_pie_pdf(c, width, height)
+            c.showPage()
+            y = height - 50
+            c.setFont("Helvetica", 12)
+
+    y -= 20
+
+    # --- Sección 2: Totales por técnico ---
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(margen_izq, y, "👷 Reclamos resueltos por técnico:")
+    y -= 20
+
+    if "Técnico" in df_filtrado.columns:
+        df_filtrado["Técnico"] = df_filtrado["Técnico"].fillna("").astype(str)
+        df_filtrado["tecnicos_set"] = df_filtrado["Técnico"].apply(
+            lambda x: tuple(sorted([t.strip().upper() for t in x.split(",") if t.strip()]))
+        )
+        conteo_tecnicos = (
+            df_filtrado.groupby("tecnicos_set").size().reset_index(name="Cantidad")
+        )
+
+        if conteo_tecnicos.empty:
+            c.setFont("Helvetica", 12)
+            c.drawString(margen_izq + 20, y, "No hay técnicos asignados en los reclamos resueltos.")
+        else:
+            c.setFont("Helvetica", 12)
+            for _, row in conteo_tecnicos.iterrows():
+                tecnicos = ", ".join(row["tecnicos_set"]) if row["tecnicos_set"] else "Sin técnico"
+                c.drawString(margen_izq + 20, y, f"- {tecnicos}: {row['Cantidad']}")
+                y -= 15
+                if y < 60:
+                    agregar_pie_pdf(c, width, height)
+                    c.showPage()
+                    y = height - 50
+                    c.setFont("Helvetica", 12)
+    else:
+        c.drawString(margen_izq + 20, y, "Columna 'Técnico' no encontrada en los datos.")
+
+    agregar_pie_pdf(c, width, height)
+    c.save()
+    buffer.seek(0)
+    return buffer
+
 def _crear_pdf_reclamos(df, titulo, usuario=None):
     """Crea un PDF con el mismo estilo de impresión que planificación.
 
