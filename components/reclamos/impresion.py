@@ -12,7 +12,6 @@ from utils.date_utils import ahora_argentina
 from utils.reporte_diario import *
 from config.settings import DEBUG_MODE
 
-
 def render_impresion_reclamos(df_reclamos, df_clientes, user):
     """
     Muestra la sección para imprimir reclamos en formato PDF
@@ -24,9 +23,9 @@ def render_impresion_reclamos(df_reclamos, df_clientes, user):
 
     Returns:
         dict: {
-            'needs_refresh': bool,  # Siempre False para este módulo
-            'message': str,         # Mensaje sobre la operación realizada
-            'data_updated': bool    # Siempre False para este módulo
+            'needs_refresh': bool,
+            'message': str,
+            'data_updated': bool
         }
     """
     result = {
@@ -34,7 +33,7 @@ def render_impresion_reclamos(df_reclamos, df_clientes, user):
         'message': None,
         'data_updated': False
     }
-    
+
     st.subheader("📨️ Seleccionar reclamos para imprimir (formato técnico compacto)")
 
     try:
@@ -60,48 +59,48 @@ def render_impresion_reclamos(df_reclamos, df_clientes, user):
 
         # === REORGANIZACIÓN EN GRID 2x3 ===
         st.markdown("### 🖨️ Opciones de Impresión")
-        
+
         # Fila 1: Dos opciones
         col1, col2 = st.columns(2)
-        
+
         with col1:
             mensaje_todos = _generar_pdf_todos_pendientes(df_merged, user if incluir_usuario else None)
             if mensaje_todos:
                 result['message'] = mensaje_todos
-        
+
         with col2:
             mensaje_tipo = _generar_pdf_por_tipo(df_merged, solo_pendientes, user if incluir_usuario else None)
             if mensaje_tipo:
                 result['message'] = mensaje_tipo
-        
+
         # Fila 2: Dos opciones
         col3, col4 = st.columns(2)
-        
+
         with col3:
             mensaje_manual = _generar_pdf_manual(df_merged, solo_pendientes, user if incluir_usuario else None)
             if mensaje_manual:
                 result['message'] = mensaje_manual
-        
+
         with col4:
             mensaje_desconexiones = _generar_pdf_desconexiones(df_merged, user if incluir_usuario else None)
             if mensaje_desconexiones:
                 result['message'] = mensaje_desconexiones
-        
+
         # Fila 3: Dos opciones
         col5, col6 = st.columns(2)
-        
+
         with col5:
             mensaje_en_curso = _generar_pdf_en_curso_por_tecnico(df_merged, user if incluir_usuario else None)
             if mensaje_en_curso:
                 result['message'] = mensaje_en_curso
-        
+
         with col6:
             # Nueva opción: Reporte Diario en el grid
             st.markdown("#### 📄 Reporte Diario")
             if st.button("🖼️ Generar imagen del día", use_container_width=True):
                 img_buffer = generar_reporte_diario_imagen(df_reclamos)
                 fecha_hoy = ahora_argentina().strftime("%Y-%m-%d")
-                
+
                 st.download_button(
                     label="⬇️ Descargar Reporte",
                     data=img_buffer,
@@ -109,16 +108,6 @@ def render_impresion_reclamos(df_reclamos, df_clientes, user):
                     mime="image/png",
                     use_container_width=True
                 )
-
-    except Exception as e:
-        st.error(f"❌ Error al generar PDF: {str(e)}")
-        result['message'] = f"Error al generar PDF: {str(e)}"
-        if DEBUG_MODE:
-            st.exception(e)
-    finally:
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    return result
 
         # === NUEVA FILA: Resumen Mensual ===
         st.markdown("---")
@@ -138,6 +127,16 @@ def render_impresion_reclamos(df_reclamos, df_clientes, user):
                     mime="application/pdf",
                     use_container_width=True
                 )
+
+    except Exception as e:
+        st.error(f"❌ Error al generar PDF: {str(e)}")
+        result['message'] = f"Error al generar PDF: {str(e)}"
+        if DEBUG_MODE:
+            st.exception(e)
+    finally:
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    return result
 
 def _preparar_datos(df_reclamos, df_clientes, user):
     """Prepara y combina los datos para impresión incluyendo info de usuario"""
