@@ -379,38 +379,60 @@ def _actualizar_reclamo_mejorado(df, sheet_reclamos, reclamo_id, updates, full_u
                 st.exception(e)
             return False
 
-def _mostrar_reclamos_desconexion(df, sheet_reclamos, user):
-    """Muestra lista de reclamos con estado 'Desconexión' y botón para resolver."""
-    df_desconexion = df[df["Estado"] == "Desconexión"]
-    
+def _mostrar_reclamos_desconexion(df, sheet_reclamos):
+    """
+    Muestra los reclamos del tipo 'Desconexión a pedido' y permite marcarlos como resueltos.
+    """
+
+    st.markdown("### 🔌 Desconexiones a Pedido Pendientes")
+
+    # Filtramos solo las desconexiones a pedido pendientes
+    df_desconexion = df[
+        (df["Tipo de reclamo"].astype(str).str.strip().str.lower() == "desconexión a pedido")
+        & (df["Estado"].astype(str).str.strip().str.lower() != "resuelto")
+    ]
+
     if df_desconexion.empty:
-        st.info("No hay reclamos con estado 'Desconexión'.")
+        st.info("No hay desconexiones a pedido pendientes.")
         return
-    
-    st.write(f"**Total de reclamos con desconexión:** {len(df_desconexion)}")
-    
-    for _, reclamo in df_desconexion.iterrows():
-        card_id = reclamo["ID Reclamo"]
-        
-        with st.container():
-            col1, col2, col3 = st.columns([3, 2, 1])
-            
+
+    for _, row in df_desconexion.iterrows():
+        with st.container(border=True):
+            card_id = row.get("ID", "")
+            nombre = row.get("Nombre", "Sin nombre")
+            direccion = row.get("Dirección", "Sin dirección")
+            fecha = row.get("Fecha y hora", "")
+            tecnico = row.get("Técnico", "Sin asignar")
+
+            col1, col2, col3 = st.columns([3, 2, 2])
             with col1:
-                st.markdown(f"**{reclamo['Nombre']}** (`{reclamo['Nº Cliente']}`)")
-                st.caption(f"ID Reclamo: {card_id} | Fecha: {format_fecha(reclamo['Fecha y hora'], '%d/%m/%Y %H:%M')}")
-                st.markdown(f"*{reclamo['Tipo de reclamo']}* - Sector {reclamo['Sector']}")
-            
+                st.markdown(f"**👤 Cliente:** {nombre}")
+                st.markdown(f"🏠 {direccion}")
+                st.markdown(f"📅 {fecha}")
             with col2:
-                st.markdown(f"**Teléfono:** {reclamo.get('Teléfono', 'N/A')}")
-                st.markdown(f"**Detalles:** {reclamo.get('Detalles', 'Sin detalles')[:50]}...")
-            
+                st.markdown(f"🧰 Técnico: {tecnico}")
+                st.markdown(f"📞 Nº Cliente: {row.get('Nº Cliente', '')}")
             with col3:
-                if st.button("✅ Desc de Caja", key=f"resolve_{card_id}", use_container_width=True):
-                    if _actualizar_reclamo_mejorado(df, sheet_reclamos, card_id, {"estado": "Resuelto"}):
-                        st.success(f"Reclamo {card_id} marcado como resuelto.")
-                        st.rerun()
-            
-            st.divider()
+                st.markdown(f"🆔 ID: `{card_id}`")
+                if st.button(f"✅ Marcar Resuelto", key=f"resuelto_{card_id}", use_container_width=True):
+                    try:
+                        # Actualizamos el estado a "Resuelto"
+                        exito = _actualizar_reclamo_mejorado(
+                            df,
+                            sheet_reclamos,
+                            card_id,
+                            {"estado": "Resuelto"},
+                            full_update=False
+                        )
+
+                        if exito:
+                            st.success(f"Reclamo {card_id} marcado como resuelto.")
+                            st.rerun()
+                        else:
+                            st.warning(f"No se pudo actualizar el reclamo {card_id}.")
+                    except Exception as e:
+                        st.error(f"❌ Error al actualizar reclamo {card_id}: {e}")
+
 
 def _actualizar_reclamo(df, sheet_reclamos, reclamo_id, updates, user, full_update=False):
     """Función original de actualización (mantenida por compatibilidad)"""
