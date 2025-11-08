@@ -43,7 +43,7 @@ def render_gestion_reclamos(df_reclamos, df_clientes, sheet_reclamos, user):
         # 4. Lista de reclamos con estado "Desconexión"
         st.markdown("---")
         st.subheader("🔌 Reclamos con Estado 'Desconexión'")
-        _mostrar_reclamos_desconexion(df_preparado, sheet_reclamos, user)
+        _gestionar_desconexiones(df_preparado, sheet_reclamos, user)
 
     except Exception as e:
         st.error(f"⚠️ Error en la gestión de reclamos: {str(e)}")
