@@ -459,8 +459,8 @@ def _gestionar_desconexiones(df, sheet_reclamos, user):
 
     # Filtrar solo las desconexiones con estado "Desconexión"
     desconexiones = df[
-        (df["Tipo de reclamo"].astype(str).str.strip().str.lower() == "desconexión a pedido") &
-        (df["Estado"].astype(str).str.strip().str.lower() == "desconexión")
+        (df["Tipo de reclamo"].astype(str).str.strip().str.lower() == "Desconexión a Pedido") &
+        (df["Estado"].astype(str).str.strip().str.lower() == "Desconexión")
     ]
 
     if desconexiones.empty:
