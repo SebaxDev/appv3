@@ -379,7 +379,7 @@ def _actualizar_reclamo_mejorado(df, sheet_reclamos, reclamo_id, updates, full_u
                 st.exception(e)
             return False
 
-def _mostrar_reclamos_desconexion(df, sheet_reclamos):
+def _mostrar_reclamos_desconexion(df, sheet_reclamos, user):
     """
     Muestra los reclamos del tipo 'Desconexión a pedido' y permite marcarlos como resueltos.
     """
@@ -432,7 +432,6 @@ def _mostrar_reclamos_desconexion(df, sheet_reclamos):
                             st.warning(f"No se pudo actualizar el reclamo {card_id}.")
                     except Exception as e:
                         st.error(f"❌ Error al actualizar reclamo {card_id}: {e}")
-
 
 def _actualizar_reclamo(df, sheet_reclamos, reclamo_id, updates, user, full_update=False):
     """Función original de actualización (mantenida por compatibilidad)"""
