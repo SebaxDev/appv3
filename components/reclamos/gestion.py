@@ -381,15 +381,14 @@ def _actualizar_reclamo_mejorado(df, sheet_reclamos, reclamo_id, updates, full_u
 
 def _mostrar_reclamos_desconexion(df, sheet_reclamos, user):
     """
-    Muestra los reclamos del tipo 'Desconexión a pedido' y permite marcarlos como resueltos.
+    Muestra los reclamos con estado 'Desconexión' y permite marcarlos como resueltos.
     """
 
-    st.markdown("### 🔌 Desconexiones a Pedido Pendientes")
+    st.markdown("### 🔌 Desconexiones a Pedido (en estado 'Desconexión')")
 
-    # Filtramos solo las desconexiones a pedido pendientes
+    # Filtrar todos los reclamos con estado "Desconexión"
     df_desconexion = df[
-        (df["Tipo de reclamo"].astype(str).str.strip().str.lower() == "desconexión a pedido")
-        & (df["Estado"].astype(str).str.strip().str.lower() != "resuelto")
+        df["Estado"].astype(str).str.strip().str.lower() == "desconexión"
     ]
 
     if df_desconexion.empty:
@@ -398,7 +397,7 @@ def _mostrar_reclamos_desconexion(df, sheet_reclamos, user):
 
     for _, row in df_desconexion.iterrows():
         with st.container(border=True):
-            card_id = row.get("ID", "")
+            card_id = row.get("ID Reclamo", row.get("ID", ""))
             nombre = row.get("Nombre", "Sin nombre")
             direccion = row.get("Dirección", "Sin dirección")
             fecha = row.get("Fecha y hora", "")
@@ -416,7 +415,6 @@ def _mostrar_reclamos_desconexion(df, sheet_reclamos, user):
                 st.markdown(f"🆔 ID: `{card_id}`")
                 if st.button(f"✅ Marcar Resuelto", key=f"resuelto_{card_id}", use_container_width=True):
                     try:
-                        # Actualizamos el estado a "Resuelto"
                         exito = _actualizar_reclamo_mejorado(
                             df,
                             sheet_reclamos,
@@ -432,6 +430,7 @@ def _mostrar_reclamos_desconexion(df, sheet_reclamos, user):
                             st.warning(f"No se pudo actualizar el reclamo {card_id}.")
                     except Exception as e:
                         st.error(f"❌ Error al actualizar reclamo {card_id}: {e}")
+
 
 def _actualizar_reclamo(df, sheet_reclamos, reclamo_id, updates, user, full_update=False):
     """Función original de actualización (mantenida por compatibilidad)"""
