@@ -332,49 +332,120 @@ def _mostrar_edicion_reclamo_mejorado(df, sheet_reclamos, user):
     return False
 
 def _actualizar_reclamo_mejorado(df, sheet_reclamos, reclamo_id, updates, full_update=False):
-    """Actualiza el reclamo en la hoja de cálculo (versión mejorada)"""
+    """Actualiza el reclamo en la hoja de cálculo (versión mejorada y más tolerante)."""
     with st.spinner("Actualizando reclamo..."):
         try:
-            fila = df[df["ID Reclamo"] == reclamo_id].index[0] + 2
+            # Normalizar reclamo_id a string sin espacios
+            reclamo_id_str = str(reclamo_id).strip()
+
+            # Buscar la fila del reclamo en varias columnas posibles (tolerante a nombres distintos)
+            df_ids = df.copy()
+            # Asegurarnos de que las columnas que vamos a buscar existan
+            posible_cols = [col for col in ["ID Reclamo", "ID", "Id", "id_reclamo"] if col in df_ids.columns]
+            filas_encontradas = pd.Index([])
+
+            for col in posible_cols:
+                try:
+                    matches = df_ids[df_ids[col].astype(str).str.strip() == reclamo_id_str].index
+                    if not matches.empty:
+                        filas_encontradas = matches
+                        break
+                except Exception:
+                    continue
+
+            # Si no lo encontró exacto, intentar búsqueda parcial (por si el id fue cortado o tiene prefijo)
+            if filas_encontradas.empty:
+                for col in posible_cols:
+                    try:
+                        matches = df_ids[df_ids[col].astype(str).str.strip().str.contains(reclamo_id_str, na=False)].index
+                        if not matches.empty:
+                            filas_encontradas = matches
+                            break
+                    except Exception:
+                        continue
+
+            if filas_encontradas.empty:
+                st.error(f"❌ No se encontró el reclamo con ID '{reclamo_id_str}' en el DataFrame (busqué en {posible_cols}).")
+                if DEBUG_MODE:
+                    st.info(f"Columnas disponibles: {list(df.columns)}")
+                return False
+
+            fila = int(filas_encontradas[0]) + 2  # +2 para mapear al índice de Google Sheets (cabecera)
+
             updates_list = []
-            estado_anterior = df[df["ID Reclamo"] == reclamo_id]["Estado"].values[0]
+            # Guardar estado anterior para debug
+            try:
+                estado_anterior = df.loc[filas_encontradas[0], "Estado"]
+            except Exception:
+                estado_anterior = None
 
+            # Si es full_update, mapear todos los campos que correspondan
             if full_update:
-                # Mapeo de columnas según la hoja de cálculo
-                updates_list.extend([
-                    {"range": f"D{fila}", "values": [[updates['nombre'].upper()]]},      # Nombre
-                    {"range": f"E{fila}", "values": [[updates['direccion'].upper()]]},   # Dirección
-                    {"range": f"F{fila}", "values": [[str(updates['telefono'])]]},       # Teléfono
-                    {"range": f"G{fila}", "values": [[updates['tipo_reclamo']]]},        # Tipo reclamo
-                    {"range": f"H{fila}", "values": [[updates['detalles']]]},            # Detalles
-                    {"range": f"K{fila}", "values": [[updates['precinto']]]},            # Precinto
-                    {"range": f"C{fila}", "values": [[str(updates['sector'])]]},         # Sector
-                ])
+                # Sólo agregamos si están presentes en 'updates'
+                if 'nombre' in updates:
+                    updates_list.append({"range": f"D{fila}", "values": [[updates['nombre'].upper()]]})
+                if 'direccion' in updates:
+                    updates_list.append({"range": f"E{fila}", "values": [[updates['direccion'].upper()]]})
+                if 'telefono' in updates:
+                    updates_list.append({"range": f"F{fila}", "values": [[str(updates['telefono'])]]})
+                if 'tipo_reclamo' in updates:
+                    updates_list.append({"range": f"G{fila}", "values": [[updates['tipo_reclamo']]]})
+                if 'detalles' in updates:
+                    updates_list.append({"range": f"H{fila}", "values": [[updates['detalles']]]})
+                if 'precinto' in updates:
+                    updates_list.append({"range": f"K{fila}", "values": [[updates['precinto']]]})
+                if 'sector' in updates:
+                    updates_list.append({"range": f"C{fila}", "values": [[str(updates['sector'])]]})
 
-            # Estado (columna I)
-            updates_list.append({"range": f"I{fila}", "values": [[updates['estado']]]})
+            # Asegurarse de que 'estado' esté presente en updates
+            if 'estado' in updates and updates['estado'] is not None:
+                updates_list.append({"range": f"I{fila}", "values": [[updates['estado']]]})
+            else:
+                # Por seguridad, si no hay estado en updates, no alteramos este campo.
+                pass
 
-            # Si pasa a pendiente, limpiar columna J (técnico)
-            if updates['estado'] == "Pendiente":
+            # Si quiere volver a "Pendiente" limpiamos técnico (J)
+            if 'estado' in updates and str(updates['estado']).strip().lower() == "pendiente":
                 updates_list.append({"range": f"J{fila}", "values": [[""]]})
 
-            # Guardar en Google Sheets
+            # Si por alguna razón la lista queda vacía (no hay campos para actualizar),
+            # al menos intentamos escribir el estado si viene en updates.
+            if not updates_list and 'estado' in updates:
+                updates_list.append({"range": f"I{fila}", "values": [[updates['estado']]]})
+
+            if not updates_list:
+                st.warning("⚠️ No hay cambios para enviar a la hoja (updates_list vacío).")
+                return False
+
+            # Ejecutar la operación en batch (usa tu api_manager)
             success, error = api_manager.safe_sheet_operation(
-                dm_batch_update_sheet, 
-                sheet_reclamos, 
-                updates_list, 
+                dm_batch_update_sheet,
+                sheet_reclamos,
+                updates_list,
                 is_batch=True
             )
 
             if success:
+                # Limpiar cache para que una nueva carga traiga los datos actualizados
+                try:
+                    st.cache_data.clear()
+                except Exception:
+                    pass
+
                 st.success("✅ Reclamo actualizado correctamente.")
+                # DEBUG: mostrar qué se envió
+                if DEBUG_MODE:
+                    st.info(f"Fila actualizada: {fila}")
+                    st.json({"updates_sent": updates_list, "estado_anterior": estado_anterior})
                 return True
             else:
-                st.error(f"❌ Error al actualizar: {error}")
+                st.error(f"❌ Error al actualizar en Google Sheets: {error}")
+                if DEBUG_MODE:
+                    st.exception(error)
                 return False
 
         except Exception as e:
-            st.error(f"❌ Error inesperado: {str(e)}")
+            st.error(f"❌ Error inesperado al actualizar reclamo: {e}")
             if DEBUG_MODE:
                 st.exception(e)
             return False
