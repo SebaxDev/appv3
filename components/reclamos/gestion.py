@@ -450,7 +450,7 @@ def _actualizar_reclamo_mejorado(df, sheet_reclamos, reclamo_id, updates, full_u
                 st.exception(e)
             return False
 
-def _gestionar_desconexiones(df, sheet_reclamos):
+def _gestionar_desconexiones(df, sheet_reclamos, user):
     """
     Gestiona las desconexiones a pedido (permite marcarlas como resueltas).
     """
