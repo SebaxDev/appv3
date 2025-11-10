@@ -494,21 +494,48 @@ def _gestionar_desconexiones(df, sheet_reclamos, user):
 
     return cambios
 
-
 def _marcar_desconexion_como_resuelta(row, sheet_reclamos):
     """
-    Marca una desconexión como resuelta en la hoja de cálculo (columna Estado = 'Resuelto').
+    Marca una desconexión como resuelta en la hoja (columna Estado = 'Resuelto').
     """
     with st.spinner("Actualizando estado..."):
         try:
-            fila = row.name + 2  # Compensar encabezado
+            reclamo_id = str(row.get("ID Reclamo", "")).strip()
+
+            if not reclamo_id:
+                st.error("⚠️ No se encontró el ID del reclamo para actualizar.")
+                return False
+
+            # Buscar la fila correspondiente en la hoja
+            df_sheet = sheet_reclamos.get_all_records()
+            df_aux = pd.DataFrame(df_sheet)
+
+            if "ID Reclamo" not in df_aux.columns:
+                st.error("❌ No se encontró la columna 'ID Reclamo' en la hoja.")
+                return False
+
+            match = df_aux[df_aux["ID Reclamo"].astype(str).str.strip() == reclamo_id]
+            if match.empty:
+                st.error(f"❌ No se encontró el reclamo con ID {reclamo_id} en la hoja.")
+                return False
+
+            fila = int(match.index[0]) + 2  # +2 por cabecera
+
+            updates_list = [{"range": f"I{fila}", "values": [["Resuelto"]]}]
+
             success, error = api_manager.safe_sheet_operation(
-                sheet_reclamos.update,
-                f"I{fila}",
-                [["Resuelto"]]
+                dm_batch_update_sheet,
+                sheet_reclamos,
+                updates_list,
+                is_batch=True
             )
 
             if success:
+                try:
+                    st.cache_data.clear()
+                except Exception:
+                    pass
+
                 st.success(f"✅ Desconexión de {row.get('Nombre', 'Cliente')} marcada como resuelta.")
                 return True
             else:
@@ -516,11 +543,10 @@ def _marcar_desconexion_como_resuelta(row, sheet_reclamos):
                 return False
 
         except Exception as e:
-            st.error(f"❌ Error inesperado: {str(e)}")
+            st.error(f"❌ Error inesperado al actualizar desconexión: {e}")
             if DEBUG_MODE:
                 st.exception(e)
             return False
-
 
 def _actualizar_reclamo(df, sheet_reclamos, reclamo_id, updates, user, full_update=False):
     """Función original de actualización (mantenida por compatibilidad)"""
