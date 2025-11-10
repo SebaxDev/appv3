@@ -2,6 +2,7 @@
 
 import streamlit as st
 import pandas as pd
+import unidecode  # al inicio del archivo
 from datetime import datetime
 from utils.date_utils import format_fecha, parse_fecha
 from utils.api_manager import api_manager
@@ -458,9 +459,11 @@ def _gestionar_desconexiones(df, sheet_reclamos, user):
     st.markdown("### 🔌 Desconexiones a Pedido Pendientes")
 
     # Filtrar solo las desconexiones con estado "Desconexión"
+    import unidecode  # al inicio del archivo
+
     desconexiones = df[
-        (df["Tipo de reclamo"].astype(str).str.strip().str.lower() == "Desconexion a Pedido") &
-        (df["Estado"].astype(str).str.strip().str.lower() == "Desconexión")
+        (df["Tipo de reclamo"].apply(lambda x: unidecode.unidecode(str(x)).strip().lower()) == "desconexion a pedido") &
+        (df["Estado"].apply(lambda x: unidecode.unidecode(str(x)).strip().lower()) == "desconexion")
     ]
 
     if desconexiones.empty:
