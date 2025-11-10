@@ -111,19 +111,32 @@ def render_impresion_reclamos(df_reclamos, df_clientes, user):
 
         # === NUEVA FILA: Resumen Mensual ===
         st.markdown("---")
-        st.markdown("### 🗓️ Resumen Mensual de Reclamos Resueltos")
+        st.markdown("### 🗓️ Resumen de Reclamos Resueltos")
         col7, col8 = st.columns(2)
 
         with col7:
-            st.markdown("#### 📅 Resumen Mensual (PDF)")
-            if st.button("📄 Generar Resumen Mensual", use_container_width=True):
-                buffer = _generar_pdf_resumen_mensual(df_reclamos, user if incluir_usuario else None)
+            st.markdown("#### 📅 Generar Resumen (PDF)")
+
+            # Selector de rango de días
+            rango_dias = st.selectbox(
+                "Seleccionar período:",
+                options=[15, 30, 60, 90],
+                index=1,  # 30 días por defecto
+                format_func=lambda x: f"Últimos {x} días"
+            )
+
+            if st.button("📄 Generar Resumen", use_container_width=True):
+                buffer = _generar_pdf_resumen_mensual(
+                    df_reclamos,
+                    usuario=user if incluir_usuario else None,
+                    rango_dias=rango_dias
+                )
                 fecha_hoy = ahora_argentina().strftime("%Y-%m-%d")
 
                 st.download_button(
                     label="⬇️ Descargar PDF",
                     data=buffer,
-                    file_name=f"resumen_mensual_{fecha_hoy}.pdf",
+                    file_name=f"resumen_{rango_dias}d_{fecha_hoy}.pdf",
                     mime="application/pdf",
                     use_container_width=True
                 )
@@ -476,8 +489,8 @@ def _generar_pdf_en_curso_por_tecnico(df_merged, usuario=None):
 # ==============================
 # Utilidad central para crear PDF
 # ==============================
-def _generar_pdf_resumen_mensual(df_reclamos, usuario=None):
-    """Genera un PDF con el resumen mensual de reclamos resueltos (últimos 30 días)."""
+def _generar_pdf_resumen_mensual(df_reclamos, usuario=None, rango_dias=30):
+    """Genera un PDF con el resumen de reclamos resueltos dentro de un rango de días elegido."""
     import io
     from datetime import datetime, timedelta
     from reportlab.pdfgen import canvas
@@ -490,28 +503,28 @@ def _generar_pdf_resumen_mensual(df_reclamos, usuario=None):
     margen_izq = 50
     y = height - 50
     hoy = ahora_argentina()
-    hace_30_dias = hoy - timedelta(days=30)
+    fecha_inicio = hoy - timedelta(days=rango_dias)
 
-    # Filtrar solo los reclamos resueltos en los últimos 30 días
+    # Filtrar solo los reclamos resueltos en el rango seleccionado
     df = df_reclamos.copy()
     df["Fecha y hora"] = pd.to_datetime(df["Fecha y hora"], dayfirst=True, errors='coerce')
     df_filtrado = df[
         (df["Estado"].astype(str).str.strip().str.lower() == "resuelto") &
-        (df["Fecha y hora"].dt.date >= hace_30_dias.date())
+        (df["Fecha y hora"].dt.date >= fecha_inicio.date())
     ]
 
     c.setFont("Helvetica-Bold", 16)
-    c.drawString(margen_izq, y, "📅 RESUMEN MENSUAL DE RECLAMOS RESUELTOS")
+    c.drawString(margen_izq, y, f"📅 RESUMEN DE RECLAMOS RESUELTOS - ÚLTIMOS {rango_dias} DÍAS")
     y -= 20
     c.setFont("Helvetica", 10)
-    c.drawString(margen_izq, y, f"Período: {hace_30_dias.strftime('%d/%m/%Y')} - {hoy.strftime('%d/%m/%Y')}")
+    c.drawString(margen_izq, y, f"Período: {fecha_inicio.strftime('%d/%m/%Y')} - {hoy.strftime('%d/%m/%Y')}")
     if usuario:
         c.drawString(width - 200, y, f"Por: {usuario.get('nombre', 'Sistema')}")
     y -= 30
 
     if df_filtrado.empty:
         c.setFont("Helvetica", 12)
-        c.drawString(margen_izq, y, "No se encontraron reclamos resueltos en los últimos 30 días.")
+        c.drawString(margen_izq, y, f"No se encontraron reclamos resueltos en los últimos {rango_dias} días.")
         agregar_pie_pdf(c, width, height)
         c.save()
         buffer.seek(0)
