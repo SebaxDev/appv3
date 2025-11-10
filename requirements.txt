@@ -10,3 +10,4 @@ streamlit-lottie
 Pillow
 passlib
 bcrypt
+unidecode
