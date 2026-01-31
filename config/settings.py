@@ -104,6 +104,7 @@ TECNICOS_DISPONIBLES = [
 ]
 
 TIPOS_RECLAMO = [
+    "— Seleccione un Tipo de Reclamo —",
     "Caja Sin Señal",
     "Cambio de Equipo",
     "Cambio de Ficha",
