@@ -99,16 +99,16 @@ OPCIONES_PERMISOS = {
 SECTORES_DISPONIBLES = [str(n) for n in range(1, 18)]
 
 TECNICOS_DISPONIBLES = [
-    "Braian", "Conejo", "Juan", "Junior", "Maxi", 
+    "Braian", "Conejo", "Juan", "Junior", "Maxi", "Marki", 
     "Ramon", "Roque", "Viki", "Oficina", "Base"
 ]
 
 TIPOS_RECLAMO = [
-    "Conexion C+I", "Conexion Cable", "Conexion Internet", "Suma Internet",
+    "Caja Sin Señal", "Conexion C+I", "Conexion Cable", "Conexion Internet", "Suma Internet",
     "Suma Cable", "Reconexion", "Reconexion C+I", "Reconexion Internet", "Reconexion Cable", "Sin Señal Ambos", "Sin Señal Cable",
-    "Sin Señal Internet", "Sintonia", "Sintonizar HD", "Interferencia", "Traslado",
-    "Extension", "Extension x2", "Extension x3", "Extension x4", "Cambio de Ficha",
-    "Cambio de Equipo", "Reclamo", "Cambio de Plan", "Desconexion a Pedido"
+    "Sin Señal Internet", "Sintonia", "Interferencia", "Internet Lento", "Traslado", "Trabajo de Linea",
+    "Extension", "Extension x2", "Extension x3", "Extension x4", "Cambio de Ficha", "Poco Alcance",
+    "Mejorar Señal", "Cambio de Equipo", "Reclamo", "Cambio de Plan", "Desconectar Servicio", "Desconexion a Pedido"
 ]
 
 # --------------------------
@@ -139,6 +139,12 @@ ROUTER_POR_SECTOR = {
 # Materiales mínimos requeridos por tipo de reclamo
 MATERIALES_POR_RECLAMO = {
     "Conexion C+I": {"router_catv": 1, "conector": 2, "ficha_f": 2},
+    "Caja Sin Señal": {},
+    "Internet Lento": {"conector": 1},
+    "Trabajo de Linea": {},
+    "Poco Alcance": {"conector": 1},
+    "Mejorar Señal": {"conector": 2},
+    "Desconectar Servicio": {},
     "Conexion Cable": {"ficha_f": 2, "micro": 1},
     "Conexion Internet": {"router_internet": 1, "conector": 2},
     "Suma Internet": {"router_catv": 1, "conector": 2, "ficha_f": 2},
@@ -151,7 +157,6 @@ MATERIALES_POR_RECLAMO = {
     "Sin Señal Cable": {"ficha_f": 2, "micro": 1},
     "Sin Señal Internet": {"conector": 1},
     "Sintonia": {},
-    "Sintonizar HD": {},
     "Interferencia": {"ficha_f": 2},
     "Traslado": {"conector": 2, "ficha_f": 2},
     "Extension": {},
