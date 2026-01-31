@@ -104,11 +104,36 @@ TECNICOS_DISPONIBLES = [
 ]
 
 TIPOS_RECLAMO = [
-    "Caja Sin Señal", "Conexion C+I", "Conexion Cable", "Conexion Internet", "Suma Internet",
-    "Suma Cable", "Reconexion", "Reconexion C+I", "Reconexion Internet", "Reconexion Cable", "Sin Señal Ambos", "Sin Señal Cable",
-    "Sin Señal Internet", "Sintonia", "Interferencia", "Internet Lento", "Traslado", "Trabajo de Linea",
-    "Extension", "Extension x2", "Extension x3", "Extension x4", "Cambio de Ficha", "Poco Alcance",
-    "Mejorar Señal", "Cambio de Equipo", "Reclamo", "Cambio de Plan", "Desconectar Servicio", "Desconexion a Pedido"
+    "Caja Sin Señal",
+    "Cambio de Equipo",
+    "Cambio de Ficha",
+    "Cambio de Plan",
+    "Conexion C+I",
+    "Conexion Cable",
+    "Conexion Internet",
+    "Desconexion a Pedido",
+    "Desconectar Servicio",
+    "Extension",
+    "Extension x2",
+    "Extension x3",
+    "Extension x4",
+    "Interferencia",
+    "Internet Lento",
+    "Mejorar Señal",
+    "Poco Alcance",
+    "Reclamo",
+    "Reconexion",
+    "Reconexion C+I",
+    "Reconexion Cable",
+    "Reconexion Internet",
+    "Sin Señal Ambos",
+    "Sin Señal Cable",
+    "Sin Señal Internet",
+    "Sintonia",
+    "Suma Cable",
+    "Suma Internet",
+    "Trabajo de Linea",
+    "Traslado"
 ]
 
 # --------------------------
